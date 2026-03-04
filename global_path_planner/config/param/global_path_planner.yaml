@@ -1,0 +1,12 @@
+node_name1:
+  ros__parameters:
+    # デバッグ用
+    test_show: true
+    sleep_time: 0.001
+
+    # 経由点
+    way_points_x: [] ######
+    way_points_y: [] ######
+
+    # 車両マージン（ルンバの半径）
+    margin: ######

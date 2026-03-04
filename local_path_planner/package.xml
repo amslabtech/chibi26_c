@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>team_local_path_planner</name>
+  <version>0.0.0</version>
+  <description>The team_local_path_planner package</description>
+  <maintainer email="amsl@todo.todo">amsl</maintainer>
+
+  <license>todo</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>ament_cmake</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>tf2</depend>
+  <depend>roomba_500driver_meiji</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

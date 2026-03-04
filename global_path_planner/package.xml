@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>team_global_path_planner</name>
+  <version>0.0.0</version>
+  <description>The team_global_path_planner package</description>
+  <maintainer email="amsl@todo.todo">amsl</maintainer>
+  <license>todo</license>
+
+  <buildtool_depend>ament_cmake_ros</buildtool_depend>
+
+  <depend>ament_cmake_auto</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>vector</depend>
+  <depend>math.h</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
