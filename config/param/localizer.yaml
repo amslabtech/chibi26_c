@@ -1,0 +1,53 @@
+node_name1:
+  ros__parameters:
+
+    # 基本設定
+    hz: 10              # ループ周期 [Hz]
+    particle_num: 500   # パーティクルの個数 [-]
+    max_particle_num: 1000   #パーティクルの最大個数
+    min_particle_num: 100   #パーティクルの最小個数
+    move_dist_th: 0.05 # ロボットの移動開始判断用（スタートからの距離の閾値）[m]
+
+    # 初期ポーズ関連
+    init_x: 0.0       # 初期位置 [m]
+    init_y: 0.0       # 初期位置 [m]
+    init_yaw: 0.0     # 初期姿勢 [rad]
+    init_x_dev: 0.50  # 初期位置xの標準偏差 [m]
+    init_y_dev: 0.65  # 初期位置yの標準偏差 [m]
+    init_yaw_dev: 0.5 # 初期姿勢の標準偏差 [rad]
+
+    # リセット関連
+    alpha_th: 0.0017        # リセットに関する平均尤度の閾値 [-]
+    reset_count_limit: 5    # 連続リセットの回数の上限 [-]
+    expansion_x_dev: 0.05   # 膨張リセットの位置xの標準偏差 [m]
+    expansion_y_dev: 0.05   # 膨張リセットの位置yの標準偏差 [m]
+    expansion_yaw_dev: 0.01 # 膨張リセットの姿勢の標準偏差 [rad]
+
+    # センサ関連
+    laser_step: 10           # 何本ずつレーザを見るか(全1080本)[-]
+    sensor_noise_ratio: 0.03 # 距離に対するセンサノイズ比 [-]
+
+    # --- 柱に関する角度範囲の配列 [rad] ---
+    # 以下が無視される
+    # [0] < angle < [1], [2] < angle
+    # [num] -> num:index
+    # [min1, max1, min2, max2, min3, max3, min4, max4]
+    # 右後, 左後, 左前, 右前 の順（目安）
+    ignore_angle_range_list: [
+        -2.50, -2.20,  # 右後ろの柱
+         2.20,  2.50,  # 左後ろの柱
+         0.65,  0.95,  # 左前の柱
+        -0.95, -0.65   # 右前の柱
+    ]
+    
+    # フラグ
+    flag_init_noise: true # 初期位置にノイズを加えるか
+    flag_broadcast: true  # tf情報を含むbagファイルを使うときはfalse
+    flag_reverse: false   # 初期姿勢を逆にするか
+    is_visible: true      # パーティクルクラウドを表示（パブリッシュ）するか
+
+    # ===== クラスOdomModel =====
+    ff: 0.17   # 直進1[m]で生じる道のりのばらつきの標準偏差 [m]
+    fr: 0.0005 # 回転1[rad]で生じる道のりのばらつきの標準偏差 [m]
+    rf: 0.13   # 直進1[m]で生じる向きのばらつきの標準偏差 [rad]
+    rr: 0.2    # 回転1[rad]で生じる向きのばらつきの標準偏差 [rad]
