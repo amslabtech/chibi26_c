@@ -1,0 +1,9 @@
+b_obstacle_detector:
+ros_parameters:
+
+hz: ###                   # ループ周期 [Hz]
+laser_step: ###            # 何本ずつレーザを見るか(全1080本)
+robot_frame: "base_link" # frame_id
+
+# --- はずれ値対策 ---
+ignore_dist: ######         # はずれ値とみなす距離 [m]
