@@ -11,7 +11,7 @@ LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
 {
     // パラメータの取得(hz, map_size, map_reso)
     hz_          = this->declare_parameter<int>("hz", 10);
-    map_size_    = this->declare_parameter<double>("map_size", 1);  //1m*1mの世界と仮定
+    map_size_    = this->declare_parameter<double>("map_size", 4);  //4m*4mの世界と仮定
     map_reso_    = this->declare_parameter<double>("map_reso", 0.005 );  //1マスが何mか
 
     // Sub: /sub_obs_poses
