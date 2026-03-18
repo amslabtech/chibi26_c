@@ -11,8 +11,8 @@ LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
 {
     // パラメータの取得(hz, map_size, map_reso)
     hz_          = this->declare_parameter<int>("hz", 10);
-    map_size_    = this->declare_parameter<double>("map_size", 5);  //5m*5mの世界と仮定
-    map_reso_    = this->declare_parameter<double>("map_reso", 0.05 );  //1マスが何mか
+    map_size_    = this->declare_parameter<double>("map_size", 1);  //1m*1mの世界と仮定
+    map_reso_    = this->declare_parameter<double>("map_reso", 0.005 );  //1マスが何mか
 
     // Sub: /sub_obs_poses
     sub_obs_poses_ = this->create_subscription<geometry_msgs::msg::PoseArray>(
@@ -151,9 +151,9 @@ bool LocalMapCreator::in_map(const double dist, const double angle)
 // 距離と角度からグリッドのインデックスを返す
 int LocalMapCreator::get_grid_index(const double dist, const double angle)
 {
-
 }
 */
+
 
 // 座標からグリッドのインデックスを返す
 int LocalMapCreator::xy_to_grid_index(const double x, const double y)
