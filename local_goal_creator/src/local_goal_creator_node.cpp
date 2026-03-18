@@ -1,6 +1,6 @@
 #include "local_goal_creator/local_goal_creator.hpp"
 
-void LocalGoalCreator::process()
+/*void LocalGoalCreator::process()
 {
     // パスと自己位置が少なくとも1回は届いているか確認
     if (!is_path_) {
@@ -9,7 +9,7 @@ void LocalGoalCreator::process()
     }
     
     publishGoal();
-}
+} */
 
 int main(int argc, char* argv[])
 {
@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
     
 
     while(rclcpp::ok()){
-    //    node->process();
+        node->process();
         rclcpp::spin_some(node);   // コールバック関数の実行
         loop_rate.sleep(); // 周期が終わるまで待つ
     }

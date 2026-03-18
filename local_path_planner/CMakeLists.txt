@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(team_local_path_planner)
+project(team_c_local_path_planner)
 
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)

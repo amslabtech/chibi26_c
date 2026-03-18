@@ -3,8 +3,8 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/path.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 
 class LocalGoalCreator : public rclcpp::Node
 {
@@ -30,11 +30,11 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
 
     // Publisher
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr local_goal_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr local_goal_pub_;
 
 
     nav_msgs::msg::Path path_;
-    geometry_msgs::msg::PoseStamped goal_;
+    geometry_msgs::msg::PointStamped goal_;
     geometry_msgs::msg::PoseStamped pose_;
 };
 

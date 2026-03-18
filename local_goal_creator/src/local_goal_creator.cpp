@@ -11,7 +11,7 @@ LocalGoalCreator::LocalGoalCreator() : Node("LocalGoalCreator")
     // グローバルパス内におけるローカルゴールのインデックス
     this->declare_parameter("goal_index", 0);
     // 現在位置-ゴール間の距離 [m]
-    this->declare_parameter("target_dist_to_goal", 1.0);
+    this->declare_parameter("target_dist_to_goal", 0.5);
 
     hz_ = this->get_parameter("hz").as_int();
     index_step_ = this->get_parameter("index_step").as_int();
@@ -20,9 +20,9 @@ LocalGoalCreator::LocalGoalCreator() : Node("LocalGoalCreator")
     target_dist_to_goal_ = this->get_parameter("target_dist_to_goal").as_double();
 
     // ### pubやsubの定義，tfの統合 ###
-    // -- パブリッシャーの作成(PoseStamped型) --
+    // -- パブリッシャーの作成(PointStamped型) --
     // トピック名: "local_goal"
-    local_goal_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("local_goal", 10);
+    local_goal_pub_ = this->create_publisher<geometry_msgs::msg::PointStamped>("local_goal", 10);
 
     // -- サブスクライバーの作成 --
     // トピック名: "global_path"
@@ -85,20 +85,23 @@ void LocalGoalCreator::publishGoal()
         }
     }
 
-    // 配列外参照を防ぐためのガード
+    // 配列外参照を防ぐガード
     if (goal_index_ >= (int)path_.poses.size()) {
-        goal_index_ = path_.poses.size() - 1;
+        goal_index_ = (int)path_.poses.size() - 1;
     }
 
-    // --- 配信データの作成 ---
-    // path_.poses[goal_index_] を丸ごとコピーするだけでOK！
-    // これにより座標(position)と向き(orientation)の両方が引き継がれます
-    goal_ = path_.poses[goal_index_];
-    
-    // タイムスタンプだけ最新に更新
-    goal_.header.stamp = this->get_clock()->now();
+    // --- 2. PointStamped 型のメッセージを作成 ---
+    geometry_msgs::msg::PointStamped point_msg;
 
-    local_goal_pub_->publish(goal_);
+    // ヘッダー情報のコピー (frame_id を "map" などに合わせる)
+    point_msg.header.frame_id = path_.header.frame_id;
+    point_msg.header.stamp = this->get_clock()->now();
+
+    // 座標の代入 (PoseStamped の position 部分だけを抽出)
+    point_msg.point = path_.poses[goal_index_].pose.position;
+
+    // --- 3. パブリッシュ ---
+    local_goal_pub_->publish(point_msg);
 }
 
 double LocalGoalCreator::getDistance()//距離計算関数（使わなくても平気）

@@ -9,6 +9,7 @@
 #include <nav_msgs/msg/path.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <vector>
+#include <unordered_map>
 #include <math.h>
 
 // =========================
@@ -21,6 +22,7 @@ struct Node_ {
     int    y = 0;
     int    parent_x = -1;
     int    parent_y = -1;
+    double g = 0.0;
     double f = 0.0;
 };
 
@@ -48,7 +50,7 @@ private:
     Node_ set_way_point(const int phase);            // スタート・ゴールノードの設定
     void create_path(Node_ node);                    // ノードをたどり，パスを作成
     geometry_msgs::msg::PoseStamped node_to_pose(const Node_ node);  // ノード情報を座標へ変換
-    void swap_node(const Node_ node, std::vector<Node_>& list1, std::vector<Node_>& list2); // ノードをリスト間で移動
+    void swap_node(const Node_ node); // ノードをリスト間で移動
     int check_list(const Node_ target_node, std::vector<Node_>& set); // 指定リスト内のノード検索（インデックスを取得）
     void update_list(const Node_ node);              // 隣接ノードを探索しリストを更新
     void create_neighbor_nodes(const Node_ node, std::vector<Node_>& nodes); // 指定ノードの隣接ノードを作成
@@ -75,6 +77,7 @@ private:
     void show_node_point(const Node_ node);  // Rviz上でノードをポイントとして可視化
     void show_path(nav_msgs::msg::Path& current_path);  // Rviz上で経路を可視化
     void show_exe_time();  // 経路計画の実行時間を表示
+    bool planning_done_ = false;
 
     // =========================
     // ROS関連メンバ変数
@@ -100,8 +103,8 @@ private:
     // ノード情報
     Node_ start_node_;  // 開始ノード
     Node_ goal_node_;   // 目標ノード
-    std::vector<Node_> open_list_;  // openリスト
-    std::vector<Node_> close_list_; // closeリスト
+    std::unordered_map<int, Node_> open_map_;   // openリスト  (key = y*width+x)
+    std::unordered_map<int, Node_> close_map_;  // closeリスト (key = y*width+x)
 
     // マップ情報
     double origin_x_;  // 原点のx座標
