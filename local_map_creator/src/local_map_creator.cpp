@@ -11,7 +11,7 @@ LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
 {
     // パラメータの取得(hz, map_size, map_reso)
     hz_          = this->declare_parameter<int>("hz", 10);
-    map_size_    = this->declare_parameter<double>("map_size", 50);  //50m*50mの世界と仮定
+    map_size_    = this->declare_parameter<double>("map_size", 5);  //5m*5mの世界と仮定
     map_reso_    = this->declare_parameter<double>("map_reso", 0.05 );  //1マスが何mか
 
     // Sub: /sub_obs_poses
@@ -33,6 +33,9 @@ LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
     local_map_.info.origin.position.x = -map_size_ / 2.0;
     local_map_.info.origin.position.y = -map_size_ / 2.0;
     local_map_.info.origin.position.z = 0.0;
+    local_map_.info.origin.orientation.x = 0.0;
+    local_map_.info.origin.orientation.y = 0.0;
+    local_map_.info.origin.orientation.z = 0.0;
     local_map_.info.origin.orientation.w = 1.0;
     //   data
     // グリッドの総数(width * height)分だけ配列のサイズを確保し、すべて-1(未知)で塗りつぶす
@@ -50,52 +53,89 @@ LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
 void LocalMapCreator::obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
 {
     obs_poses_ = *msg;
-    flag_obs_poses_ = true;  //データキタ！の合図
+    //flag_obs_poses_ = true;  //データキタ！の合図
 }
 
 // 周期処理の実行間隔を取得する
 int LocalMapCreator::getFreq()
 {
-    return 1000/hz_;
+    return hz_;
 }
 
 // 障害物情報が更新された場合、マップを更新する
 void LocalMapCreator::process()
 {
-    if(flag_obs_poses_)
+    /*if(flag_obs_poses_)
     {
         update_map();
         flag_obs_poses_ = false; //更新が終わったらハタ下す
-    }
+    }*/
+    init_map(); //マップ初期化
+    update_map();
+
+    // 更新したマップをpublishする
+    local_map_.header.stamp = this->now();
+    pub_local_map_->publish(local_map_);
+
 }
 
 // 障害物の情報をもとにローカルマップを更新する
 void LocalMapCreator::update_map()
 {
-    // マップを初期化する
-    init_map();
     // 障害物の位置を考慮してマップを更新する
     for (const auto& pose : obs_poses_.poses)
     {        
-        // ObstacleDetectorで変換済みのX, Y
+        // ObstacleDetectorで変換済みのx, y
         double x = pose.position.x;
         double y = pose.position.y;
         
+        // --- 原点(0,0)から障害物までを走行可能領域(0)として塗る ---
+        double dx = x;
+        double dy = y;
+        double dist = std::sqrt(dx * dx + dy * dy);
+
+        if (dist > 1e-6)
+        {
+            double step = map_reso_ * 0.5;
+            int n = static_cast<int>(dist / step);
+
+            for (int i = 0; i < n; ++i)
+            {
+                double t = static_cast<double>(i) / static_cast<double>(n);
+                double px = t * dx;
+                double py = t * dy;
+
+                int free_index = xy_to_grid_index(px, py);
+
+                if (free_index != -1)
+                {
+                    local_map_.data[free_index] = 0;
+                }
+            }
+        }
+    
         // 座標からインデックスへ変換 (ここでマップ外の判定も同時に行われる)
         int index = xy_to_grid_index(x, y);
+
+        //RCLCPP_INFO(this->get_logger(), //確認
+          //  "x=%f y=%f index=%d", x, y, index);
         
         // インデックスが -1(マップ外) でなければ、障害物をプロット
         if (index != -1)
         {
             local_map_.data[index] = 100; 
+            //RCLCPP_INFO(this->get_logger(), "plot 100 at index=%d", index);　確認
         }
+        /*else
+        {
+            local_map_.data[index] = 0;
+        }*/
+
     }
     // 更新したマップをpublishする
-    local_map_.header.stamp = this->now();  //マップのヘッダー情報のタイムスタンプを、現在時刻(this->now)にセット
-    pub_local_map_->publish(local_map_);
 }
 
-// マップの初期化(すべて「未知」にする)
+// マップの初期化(すべて「既知(走行可能)」にする)
 void LocalMapCreator::init_map()
 {
     std::fill(local_map_.data.begin(), local_map_.data.end(), -1);
