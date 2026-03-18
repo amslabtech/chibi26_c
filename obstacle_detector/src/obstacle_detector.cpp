@@ -6,15 +6,18 @@
 #include <chrono> // std::chrono::milliseconds を使うために追加
 using std::placeholders::_1;
 
+#include <vector>
+#include <algorithm>
+
 ObstacleDetector::ObstacleDetector()
 : Node("c_obstacle_detector")
 {
    // global変数を定義(yamlファイルからパラメータを読み込めるようにすると，パラメータ調整が楽)
     hz_            = this->declare_parameter<int>("hz", 10);
-    laser_step_    = this->declare_parameter<int>("laser_step", 2);
+    laser_step_    = this->declare_parameter<int>("laser_step", 1);
     robot_frame_   = this->declare_parameter<std::string>("robot_frame", "base_link");
     ignore_dist_   = this->declare_parameter<double>("ignore_dist", 300);
-    ignore_pillar_ = this->declare_parameter<double>("ignore_pillar", 0.35);
+    ignore_pillar_ = this->declare_parameter<double>("ignore_pillar", 0.40);
 
     // Sub: /scan_sub_
     scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -67,14 +70,13 @@ bool ObstacleDetector::scan_obstacle()
     for (size_t i = 0; i < scan_data.ranges.size(); i += laser_step_)
     {
         double range = scan_data.ranges[i];  // i番目の配列に入っている、LiDARから障害物までの距離mを取得
+        // LiDARの計測開始角度(angle_min)に、1本あたりの角度間隔(angle_increment) × インデックス(i) を足して、現在のレーザーの「角度[rad]」を計算する
+        double angle = scan_data.angle_min + i * scan_data.angle_increment;
 
-        if (is_ignore_scan(range))  // 外れ値かどうか確認する
+        if (is_ignore_scan(range, angle))  // 外れ値かどうか確認する
         {
             continue;  // 外れ値だった場合、これ以降の座標計算はスキップして、次のレーザーの処理（次のi）へ進む
         }
-
-        // LiDARの計測開始角度(angle_min)に、1本あたりの角度間隔(angle_increment) × インデックス(i) を足して、現在のレーザーの「角度[rad]」を計算する
-        double angle = scan_data.angle_min + i * scan_data.angle_increment;
 
         geometry_msgs::msg::Pose pose;  //// Pose型（位置と向きを持つ型）の変数を作成する。障害物の座標を格納。
         
@@ -93,21 +95,35 @@ bool ObstacleDetector::scan_obstacle()
     obstacles_pub_->publish(pose_array);  //抽出した全障害物の座標が詰まったpose_array配列をPublish
 
     return true;
+
 }
 
 
 //無視するlidar情報の範囲の決定(lidarがroombaの櫓の中にあり，櫓の４つの柱を障害物として検出してしまうため削除が必要)
-bool ObstacleDetector::is_ignore_scan(double range) const
+bool ObstacleDetector::is_ignore_scan(double range, double angle) const
 {
     // LaserScanはinfが来ることがあるので弾く
     if (!std::isfinite(range))
     {
         return true;
     }
-    // 遠すぎるor近すぎる を外れ値として除去
-    if (range >= ignore_dist_ || range <= ignore_pillar_)
+
+    // 遠すぎるものを外れ値として除去
+    if (range >= ignore_dist_)
     {
         return true;
     }
+
+    // 角度で除外（4か所）
+    if (
+        (-2.50 <= angle && angle <= -2.20) || // 右後
+        ( 2.20 <= angle && angle <=  2.50) || // 左後
+        ( 0.65 <= angle && angle <=  0.95) || // 左前
+        (-0.95 <= angle && angle <= -0.65)    // 右前
+    )
+    {
+        return true;
+    }
+
     return false;
 }

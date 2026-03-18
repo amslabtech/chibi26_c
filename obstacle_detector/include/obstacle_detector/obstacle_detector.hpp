@@ -19,7 +19,7 @@ class ObstacleDetector : public rclcpp::Node
     void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg);
     void process();
     bool scan_obstacle();
-    bool is_ignore_scan(double range) const;
+    bool is_ignore_scan(double range, double angle) const;
 
     int hz_;
     int laser_step_;
