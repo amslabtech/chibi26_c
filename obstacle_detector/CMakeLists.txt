@@ -9,7 +9,7 @@ find_package(nav_msgs REQUIRED)
 # package.xmlのdependをチェックして自動的にfind_packageしてくれる
 ament_auto_find_build_dependencies()
 # 実行ファイルを作成する
-ament_auto_add_executable(obstacle_detector_node
+ament_auto_add_executable(c_obstacle_detector_node
   src/obstacle_detector.cpp
   src/obstacle_detector_node.cpp)
 # launchファイルをインストール（ament_package_indexが探せる場所に置く）
