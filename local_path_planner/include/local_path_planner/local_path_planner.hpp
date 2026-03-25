@@ -147,10 +147,10 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr sub_obs_poses_;
 
     // Publisher
-    // rclcpp::Publisher<roomba_500driver_meiji::msg::_500Ctrl>::SharedPtr pub_cmd_speed_;
+    // rclcpp::Publisher<roomba_500driver_meiji::msg::_500Ctrl>::SharedPtr pub_cmd_vel_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_optimal_path_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_predict_path_;
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_speed_pub_;  // 制御入力
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;  // 制御入力
 
     // pose関連
     geometry_msgs::msg::PointStamped local_goal_; // local path用の目標位置
@@ -161,8 +161,8 @@ private:
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     // 制御入力
-    // roomba_500driver_meiji::msg::RoombaCtrl cmd_speed_;
-    geometry_msgs::msg::Twist cmd_speed_;
+    // roomba_500driver_meiji::msg::RoombaCtrl cmd_vel_;
+    geometry_msgs::msg::Twist cmd_vel_;
 
     // // 最大速度
     // double max_vel_;         // 計算用（追加）

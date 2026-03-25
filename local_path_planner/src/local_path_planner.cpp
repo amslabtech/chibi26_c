@@ -82,10 +82,10 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
         "obs_poses", 10, std::bind(&DWAPlanner::obs_poses_callback, this, std::placeholders::_1));
 
     // ###### Publisher ######
-    // pub_cmd_speed_ = this->create_publisher<roomba_500driver_meiji::msg::RoombaCtrl>("roomba_control", 10);
+    // pub_cmd_vel_ = this->create_publisher<roomba_500driver_meiji::msg::RoombaCtrl>("roomba_control", 10);
     pub_optimal_path_ = this->create_publisher<nav_msgs::msg::Path>("optimal_path", 10);
     pub_predict_path_ = this->create_publisher<nav_msgs::msg::Path>("predict_paths", 10);
-    cmd_speed_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_speed", 10);
+    cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
 }
 
 // local_goalのコールバック関数
@@ -153,7 +153,7 @@ void DWAPlanner::roomba_control(const double velocity, const double yawrate)
     // msg.mode = 11; // Drive Mode
     msg.linear.x = velocity;
     msg.angular.z = yawrate;
-    cmd_speed_pub_->publish(msg);
+    cmd_vel_pub_->publish(msg);
 }
 
 // 最適な制御入力を計算
