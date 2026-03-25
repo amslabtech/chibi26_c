@@ -21,9 +21,9 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     this->declare_parameter("is_visible", true);
     this->declare_parameter("hz", 10);
     this->declare_parameter("robot_frame", "base_link");
-    this->declare_parameter("max_vel", 0.0);
+    this->declare_parameter("max_vel", 2.0);
     this->declare_parameter("max_vel1", 3.0);
-    this->declare_parameter("max_vel2", 0.2);
+    this->declare_parameter("max_vel2", 1.0);
     this->declare_parameter("avoid_thres_vel", 0.1);
     this->declare_parameter("min_vel", 0.0);
     this->declare_parameter("max_yawrate", 0.0);

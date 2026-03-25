@@ -17,8 +17,8 @@ def generate_launch_description():
              parameters=[{'use_sim_time': False}],
         ),
         Node(
-            package='local_map_creator',
-            executable='local_map_creator_node',
+            package='team_c_local_map_creator',
+            executable='team_c_local_map_creator_node',
             # parameters=[{'use_sim_time': True}],
             parameters=[{'use_sim_time': False}],
         ),
@@ -32,7 +32,7 @@ def generate_launch_description():
             package='team_c_global_path_planner',
             executable='team_c_global_path_planner_node',
             # parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': True}],
-             parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': True}],
+             parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': False}],
         ),
         Node(
             package='team_c_local_goal_creator',
@@ -44,7 +44,7 @@ def generate_launch_description():
             package='team_c_local_path_planner',
             executable='team_c_local_path_planner_node',
             # parameters=[{'use_sim_time': True}],
-             parameters=[{'use_sim_time': False}],
+             parameters=['/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml', {'use_sim_time': False}],
         ),
         
         Node(
