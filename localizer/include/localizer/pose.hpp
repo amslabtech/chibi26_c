@@ -1,3 +1,4 @@
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/pose.hpp
 #ifndef POSE_HPP
 #define POSE_HPP
 
@@ -30,3 +31,4 @@ class Pose
 };
 
 #endif
+

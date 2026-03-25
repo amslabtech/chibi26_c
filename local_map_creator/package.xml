@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>local_map_creator</name>
+  <name>team_c_local_map_creator</name>
   <version>0.0.0</version>
   <description>the local_map_creator package</description>
   <maintainer email="amsl@todo.todo">amsl</maintainer>
