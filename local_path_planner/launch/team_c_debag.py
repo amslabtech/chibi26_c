@@ -10,41 +10,41 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     return LaunchDescription([
-        # Node(
-        #     package='team_c_obstacle_detector',
-        #     executable='teamb_obstacle_detector_node',
-        #     parameters=[{'use_sim_time': True}],
-        #     #  parameters=[{'use_sim_time': False}],
-        # ),
-        # Node(
-        #     package='team_c_local_map_creator',
-        #     executable='teamb_local_map_creator_node',
-        #     parameters=[{'use_sim_time': True}],
-        #     # parameters=[{'use_sim_time': False}],
-        # ),
+        Node(
+            package='c_obstacle_detector',
+            executable='c_obstacle_detector_node',
+            # parameters=[{'use_sim_time': True}],
+             parameters=[{'use_sim_time': False}],
+        ),
+        Node(
+            package='local_map_creator',
+            executable='local_map_creator_node',
+            # parameters=[{'use_sim_time': True}],
+            parameters=[{'use_sim_time': False}],
+        ),
         Node(
             package='team_c_localizer',
             executable='team_c_localizer_node',
-            parameters=[{'use_sim_time': True}],
-            #  parameters=[{'use_sim_time': False}],
+            # parameters=[{'use_sim_time': True}],
+             parameters=[{'use_sim_time': False}],
         ),
         Node(
             package='team_c_global_path_planner',
             executable='team_c_global_path_planner_node',
-            parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': True}],
-            #  parameters=[{'use_sim_time': False}],
+            # parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': True}],
+             parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': True}],
         ),
         Node(
             package='team_c_local_goal_creator',
             executable='team_c_local_goal_creator_node',
-            parameters=[{'use_sim_time': True}],
-            #  parameters=[{'use_sim_time': False}],
+            # parameters=[{'use_sim_time': True}],
+             parameters=[{'use_sim_time': False}],
         ),
         Node(
             package='team_c_local_path_planner',
             executable='team_c_local_path_planner_node',
-            parameters=[{'use_sim_time': True}],
-            #  parameters=[{'use_sim_time': False}],
+            # parameters=[{'use_sim_time': True}],
+             parameters=[{'use_sim_time': False}],
         ),
         
         Node(
