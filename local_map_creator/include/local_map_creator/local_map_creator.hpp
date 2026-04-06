@@ -46,6 +46,7 @@ class LocalMapCreator : public rclcpp::Node
         // 各種オブジェクト
         geometry_msgs::msg::PoseArray obs_poses_; // 障害物のポーズ配列
         nav_msgs::msg::OccupancyGrid  local_map_; // ローカルマップ
+        rclcpp::TimerBase::SharedPtr timer_;  //タイマー宣言
 };
 
 #endif
