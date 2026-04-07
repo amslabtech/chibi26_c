@@ -139,7 +139,7 @@ private:
     rclcpp::Clock clock_; // 時間計測用
     
     // ----- その他のオブジェクト -----
-    State roomba_{0.0, 0.0, 0.0, 0.0, 0.0}; //3.25篠田追加
+    State roomba_;
     DynamicWindow dw_;
 
     // Subscriber

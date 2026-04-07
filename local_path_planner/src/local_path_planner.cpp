@@ -45,13 +45,6 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     this->declare_parameter("weight_vel", 0.1);
     this->declare_parameter("goal_tolerance", 0.2);
     this->declare_parameter("search_range", 1.0);
-    //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
-    this->declare_parameter("weight_heading2", 0.1);
-    this->declare_parameter("weight_dist2", 0.1);
-    this->declare_parameter("mode_log_time", 1.0);
-    this->declare_parameter("stop_vel_th", 0.01);
-    this->declare_parameter("stop_yawrate_th", 0.01);
-
 
     // ###### パラメータの取得 ######
     is_visible_ = this->get_parameter("is_visible").as_bool();
@@ -77,16 +70,6 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     weight_heading1_ = this->get_parameter("weight_heading1").as_double();
     weight_dist1_ = this->get_parameter("weight_dist1").as_double();
     weight_vel_ = this->get_parameter("weight_vel").as_double();
-    //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
-    avoid_thres_vel_    = this->get_parameter("avoid_thres_vel").as_double();
-    turn_thres_yawrate_ = this->get_parameter("turn_thres_yawrate").as_double();
-    radius_margin2_     = this->get_parameter("radius_margin2").as_double();
-    search_range_       = this->get_parameter("search_range").as_double();
-    weight_heading2_ = this->get_parameter("weight_heading2").as_double();
-    weight_dist2_    = this->get_parameter("weight_dist2").as_double();
-    mode_log_time_   = this->get_parameter("mode_log_time").as_double();
-    stop_vel_th_     = this->get_parameter("stop_vel_th").as_double();
-    stop_yawrate_th_ = this->get_parameter("stop_yawrate_th").as_double();
 
     // ###### tf_buffer_とtf_listenerを初期化 ######
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());

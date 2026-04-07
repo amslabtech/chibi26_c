@@ -19,7 +19,7 @@
     max_yawrate1: 1.0 ######         # [rad/s]（平常時）
     max_yawrate2: 0.5 ######        # [rad/s]（減速時）
     turn_thres_yawrate: 0.3 ######  # [rad/s]（旋回中か判断する閾値）
-    mode_log_time: 1.0 ######  3.25篠田追加
+    mode_log_time: ######
 
     # 加速度制限
     max_accel: 1.0 ######    # [m/s^2]
@@ -30,8 +30,8 @@
     yawrate_reso: 0.01 ###### # [rad/s]
 
     # 停止状態か判断する閾値
-    stop_vel_th: 0.01 ###### 3.25篠田追加
-    stop_yawrate_th: 0.01 ###### 3.25篠田追加
+    stop_vel_th: ######
+    stop_yawrate_th: ######
 
     # 時間 [s]
     dt: 0.1 ######
