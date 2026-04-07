@@ -37,7 +37,7 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     this->declare_parameter("dt", 0.1);
     this->declare_parameter("predict_time1", 3.0);
     this->declare_parameter("predict_time2", 2.0);
-    this->declare_parameter("roomba_radius", 0.2);
+    this->declare_parameter("roomba_radius", 0.3);
     this->declare_parameter("radius_margin1", 0.1);
     this->declare_parameter("radius_margin2", 0.05);
     this->declare_parameter("weight_heading1", 0.1);
@@ -96,7 +96,7 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     sub_local_goal_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
         "local_goal", 10, std::bind(&DWAPlanner::local_goal_callback, this, std::placeholders::_1));
     sub_obs_poses_ = this->create_subscription<geometry_msgs::msg::PoseArray>(
-        "obs_poses", 10, std::bind(&DWAPlanner::obs_poses_callback, this, std::placeholders::_1));
+        "obstacle", 10, std::bind(&DWAPlanner::obs_poses_callback, this, std::placeholders::_1));
 
     // ###### Publisher ######
     // pub_cmd_vel_ = this->create_publisher<roomba_500driver_meiji::msg::RoombaCtrl>("roomba_control", 10);

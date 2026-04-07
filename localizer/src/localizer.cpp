@@ -2,7 +2,7 @@
 #include "localizer/localizer.hpp"
 
 // デフォルトコンストラクタ
-Localizer::Localizer() : Node("c_localizer"), engine_(seed_gen_())
+Localizer::Localizer() : Node("team_c_localizer"), engine_(seed_gen_())
 { 
     // パラメータの宣言
     this->declare_parameter("hz", 10);
