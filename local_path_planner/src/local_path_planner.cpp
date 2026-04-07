@@ -45,6 +45,13 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     this->declare_parameter("weight_vel", 0.1);
     this->declare_parameter("goal_tolerance", 0.2);
     this->declare_parameter("search_range", 1.0);
+    //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
+    this->declare_parameter("weight_heading2", 0.1);
+    this->declare_parameter("weight_dist2", 0.1);
+    this->declare_parameter("mode_log_time", 1.0);
+    this->declare_parameter("stop_vel_th", 0.01);
+    this->declare_parameter("stop_yawrate_th", 0.01);
+
 
     // ###### パラメータの取得 ######
     is_visible_ = this->get_parameter("is_visible").as_bool();
@@ -70,6 +77,16 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     weight_heading1_ = this->get_parameter("weight_heading1").as_double();
     weight_dist1_ = this->get_parameter("weight_dist1").as_double();
     weight_vel_ = this->get_parameter("weight_vel").as_double();
+    //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
+    avoid_thres_vel_    = this->get_parameter("avoid_thres_vel").as_double();
+    turn_thres_yawrate_ = this->get_parameter("turn_thres_yawrate").as_double();
+    radius_margin2_     = this->get_parameter("radius_margin2").as_double();
+    search_range_       = this->get_parameter("search_range").as_double();
+    weight_heading2_ = this->get_parameter("weight_heading2").as_double();
+    weight_dist2_    = this->get_parameter("weight_dist2").as_double();
+    mode_log_time_   = this->get_parameter("mode_log_time").as_double();
+    stop_vel_th_     = this->get_parameter("stop_vel_th").as_double();
+    stop_yawrate_th_ = this->get_parameter("stop_yawrate_th").as_double();
 
     // ###### tf_buffer_とtf_listenerを初期化 ######
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -79,7 +96,7 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     sub_local_goal_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
         "local_goal", 10, std::bind(&DWAPlanner::local_goal_callback, this, std::placeholders::_1));
     sub_obs_poses_ = this->create_subscription<geometry_msgs::msg::PoseArray>(
-        "obstacles", 10, std::bind(&DWAPlanner::obs_poses_callback, this, std::placeholders::_1));
+        "obs_poses", 10, std::bind(&DWAPlanner::obs_poses_callback, this, std::placeholders::_1));
 
     // ###### Publisher ######
     // pub_cmd_vel_ = this->create_publisher<roomba_500driver_meiji::msg::RoombaCtrl>("roomba_control", 10);
@@ -206,10 +223,12 @@ void DWAPlanner::change_mode()
         max_vel_ = max_vel2_;
         max_yawrate_ = max_yawrate2_;
         predict_time_ = predict_time2_;
+        radius_margin_ = radius_margin2_;
     } else {
         max_vel_ = max_vel1_;
         max_yawrate_ = max_yawrate1_;
         predict_time_ = predict_time1_;
+        radius_margin_ = radius_margin1_;
     }
 
     weight_heading_ = weight_heading1_; 
@@ -304,7 +323,7 @@ double DWAPlanner::calc_dist_eval(const std::vector<State>& traj)
     for (const auto& step : traj) {
         for (const auto& obs : obs_poses_.poses) {
             double d = std::hypot(step.x - obs.position.x, step.y - obs.position.y);
-            if (d < roomba_radius_) return -1e6; // 衝突
+            if (d < roomba_radius_ + radius_margin_) return -1e6; 
             if (d < min_dist) min_dist = d;
         }
     }

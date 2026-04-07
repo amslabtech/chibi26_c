@@ -80,8 +80,8 @@ def generate_launch_description():
         #     cmd=['ros2', 'bag', 'play', '/home/user/ws/src/chibi26_c/bag/rosbag2_2026_03_11-05_14_01', '--clock'],
         #   output='screen'
         # )
-        #     ]
-        # ),
+            ]
+         ),
     
                 
             
@@ -102,4 +102,4 @@ def generate_launch_description():
 
         
         
-    ])
+        ])
