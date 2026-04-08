@@ -1,0 +1,14 @@
+<launch>
+  <node pkg="nav2_map_server" exec="map_server" name="map_server">
+    <param name="yaml_filename" value="$(find-pkg-share team_global_path_planner)/map/c_map.yaml"/>
+  </node>
+
+  <node pkg="nav2_lifecycle_manager" exec="lifecycle_manager" name="lifecycle_manager">
+    <param name="autostart" value="true"/>
+    <param name="node_names" value="['map_server']"/>
+  </node>
+
+  <node pkg="team_global_path_planner" exec="team_global_path_planner_node" name="team_global_path_planner_node" output="screen">
+    <param from="$(find-pkg-share team_global_path_planner)/config/param/global_path_planner.yaml"/>
+  </node>
+</launch>

@@ -1,0 +1,3660 @@
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_map_creator/package.xml
+================================================================================
+
+<?xml version="1.0"?>
+<package format="3">
+  <name>team_c_local_map_creator</name>
+  <version>0.0.0</version>
+  <description>the local_map_creator package</description>
+  <maintainer email="amsl@todo.todo">amsl</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>ament_cmake_auto</depend>
+  <depend>rclcpp</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_map_creator/CMakeLists.txt
+================================================================================
+
+cmake_minimum_required(VERSION 3.8)
+project(team_c_local_map_creator)
+
+# find dependencies
+find_package(ament_cmake_auto REQUIRED)
+# package.xmlのdependをチェックして自動的にfind_packageしてくれる
+ament_auto_find_build_dependencies()
+# 実行ファイルを作成する
+ament_auto_add_executable(${PROJECT_NAME}_node
+  src/local_map_creator.cpp
+  src/local_map_creator_node.cpp
+  )
+# ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
+ament_auto_package()
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_map_creator/src/local_map_creator_node.cpp
+================================================================================
+
+#include "local_map_creator/local_map_creator.hpp"
+
+// ===== メイン関数 =====
+int main(int argc, char* argv[])
+{
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<LocalMapCreator>();
+    rclcpp::Rate loop_rate(node->getFreq());
+
+    /*
+    while(rclcpp::ok())
+    {
+        node->process();
+        rclcpp::spin_some(node);
+        loop_rate.sleep();
+    }
+    */
+    rclcpp::spin(node);
+    rclcpp::shutdown();
+    return 0;
+}
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_map_creator/src/local_map_creator.cpp
+================================================================================
+
+#include "local_map_creator/local_map_creator.hpp"
+
+// コンストラクタ
+#include <cmath>
+#include <functional>
+#include <limits>
+#include <chrono> // std::chrono::milliseconds を使うために追加
+using std::placeholders::_1;
+
+LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
+{
+    // パラメータの取得(hz, map_size, map_reso)
+    hz_          = this->declare_parameter<int>("hz", 10);
+    map_size_    = this->declare_parameter<double>("map_size", 4);  //1m*1mの世界と仮定
+    map_reso_    = this->declare_parameter<double>("map_reso", 0.005 );  //1マスが何mか
+
+    // Sub: /sub_obs_poses
+    sub_obs_poses_ = this->create_subscription<geometry_msgs::msg::PoseArray>(
+            "obstacles", 10, std::bind(&LocalMapCreator::obs_poses_callback, this, _1));
+    // Pub: /pub_local_map_
+    pub_local_map_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("local_map", 10);  //OccupancyGrid:二次元の格子で座標を表現
+
+    // --- 基本設定 ---
+    // マップの基本情報(local_map_)を設定する（header, info, data）
+    //   header
+    local_map_.header.frame_id = "base_link";
+    //   info(width, height, position.x, position.y)  
+    int grid_size = static_cast<int>(map_size_ / map_reso_); //マップの1辺が何マスになるか
+    local_map_.info.width = grid_size;
+    local_map_.info.height = grid_size;
+    local_map_.info.resolution = map_reso_;    // 1マスが何メートルかを設定
+    // ロボットの初期位置がマップのどこなのか
+    local_map_.info.origin.position.x = -map_size_ / 2.0;
+    local_map_.info.origin.position.y = -map_size_ / 2.0;
+    local_map_.info.origin.position.z = 0.0;
+    local_map_.info.origin.orientation.x = 0.0;
+    local_map_.info.origin.orientation.y = 0.0;
+    local_map_.info.origin.orientation.z = 0.0;
+    local_map_.info.origin.orientation.w = 1.0;
+    //   data
+    // グリッドの総数(width * height)分だけ配列のサイズを確保し、すべて-1(未知)で塗りつぶす
+    local_map_.data.assign(grid_size * grid_size, -1);
+
+    //timer
+    //using namespace std::chrono_literals -> コード内で 100ms や 1s のように、 ms や s という単位を使うためのもの
+    auto period = std::chrono::milliseconds(1000 / hz_);
+    timer_ = this->create_wall_timer(
+        period,
+        std::bind(&LocalMapCreator::process, this));   //この4行で100msごとにprocess()を呼ぶというテンプレみたいな
+}
+
+// obs_posesのコールバック関数
+void LocalMapCreator::obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
+{
+    obs_poses_ = *msg;
+    //flag_obs_poses_ = true;  //データキタ！の合図
+}
+
+// 周期処理の実行間隔を取得する
+int LocalMapCreator::getFreq()
+{
+    return hz_;
+}
+
+// 障害物情報が更新された場合、マップを更新する
+void LocalMapCreator::process()
+{
+    /*if(flag_obs_poses_)
+    {
+        update_map();
+        flag_obs_poses_ = false; //更新が終わったらハタ下す
+    }*/
+    init_map(); //マップ初期化
+    update_map();
+
+    // 更新したマップをpublishする
+    local_map_.header.stamp = this->now();
+    pub_local_map_->publish(local_map_);
+
+}
+
+// 障害物の情報をもとにローカルマップを更新する
+void LocalMapCreator::update_map()
+{
+    // 障害物の位置を考慮してマップを更新する
+    for (const auto& pose : obs_poses_.poses)
+    {        
+        // ObstacleDetectorで変換済みのx, y
+        double x = pose.position.x;
+        double y = pose.position.y;
+        
+        // --- 原点(0,0)から障害物までを走行可能領域(0)として塗る ---
+        double dx = x;
+        double dy = y;
+        double dist = std::sqrt(dx * dx + dy * dy);
+
+        if (dist > 1e-6)
+        {
+            double step = map_reso_ * 0.5;
+            int n = static_cast<int>(dist / step);
+
+            for (int i = 0; i < n; ++i)
+            {
+                double t = static_cast<double>(i) / static_cast<double>(n);
+                double px = t * dx;
+                double py = t * dy;
+
+                int free_index = xy_to_grid_index(px, py);
+
+                if (free_index != -1)
+                {
+                    local_map_.data[free_index] = 0;
+                }
+            }
+        }
+    
+        // 座標からインデックスへ変換 (ここでマップ外の判定も同時に行われる)
+        int index = xy_to_grid_index(x, y);
+
+        //RCLCPP_INFO(this->get_logger(), //確認
+          //  "x=%f y=%f index=%d", x, y, index);
+        
+        // インデックスが -1(マップ外) でなければ、障害物をプロット
+        if (index != -1)
+        {
+            local_map_.data[index] = 100; 
+            //RCLCPP_INFO(this->get_logger(), "plot 100 at index=%d", index);　確認
+        }
+        /*else
+        {
+            local_map_.data[index] = 0;
+        }*/
+
+    }
+    // 更新したマップをpublishする
+}
+
+// マップの初期化(すべて「既知(走行可能)」にする)
+void LocalMapCreator::init_map()
+{
+    std::fill(local_map_.data.begin(), local_map_.data.end(), -1);
+}
+
+/*  obstacle_detectorで極座標に変換したため、省略。in_mapはxy_to_grid_indexでしょり
+// マップ内の場合、trueを返す
+bool LocalMapCreator::in_map(const double dist, const double angle)
+{
+    // 指定された距離と角度がマップの範囲内か判定する
+}
+
+// 距離と角度からグリッドのインデックスを返す
+int LocalMapCreator::get_grid_index(const double dist, const double angle)
+{
+}
+*/
+
+
+// 座標からグリッドのインデックスを返す
+int LocalMapCreator::xy_to_grid_index(const double x, const double y)
+{
+    // (X, Y)からマップのマス目(grid_x, grid_y)を計算
+    //->現実の座標(m) を「何マス目か」に変換する
+    int grid_x = static_cast<int>(std::floor((x - local_map_.info.origin.position.x) / map_reso_));
+    int grid_y = static_cast<int>(std::floor((y - local_map_.info.origin.position.y) / map_reso_));
+
+    //in_map処理
+    if (grid_x < 0 || grid_x >= static_cast<int>(local_map_.info.width) ||
+        grid_y < 0 || grid_y >= static_cast<int>(local_map_.info.height))
+        {
+            return -1;
+        }
+        
+    //2次元のマス目を「1列の配列の何番目か」に変換する
+    return grid_y * local_map_.info.width + grid_x;
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_map_creator/include/local_map_creator/local_map_creator.hpp
+================================================================================
+
+#ifndef LOCAL_MAP_CREATOR_HPP
+#define LOCAL_MAP_CREATOR_HPP
+
+#include <rclcpp/rclcpp.hpp>
+#include <functional>
+#include <memory>
+#include <nav_msgs/msg/occupancy_grid.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+
+class LocalMapCreator : public rclcpp::Node
+{
+    public:
+        LocalMapCreator(); // デフォルトコンストラクタ
+        void process();
+        int getFreq();
+
+    private:
+        // ----- 関数（引数あり) ------
+        // コールバック関数
+        void obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg);
+
+        // その他の関数
+        bool in_map(const double dist, const double angle);         // マップ内か判断
+        int  get_grid_index(const double dist, const double angle); // グリッドのインデックスを返す
+        int  xy_to_grid_index(const double x, const double y);      // グリッドのインデックスを返す
+
+        // ----- 関数（引数なし）-----
+        void init_map();   // マップの初期化
+        void update_map(); // マップの更新
+
+        // ----- 変数 -----
+        int    hz_;       // ループ周波数 [Hz]
+        double map_size_; // マップの一辺の長さ [m]
+        double map_reso_; // マップの解像度 [m/cell]
+
+        // msg受け取りフラグ
+        bool flag_obs_poses_ = false;
+
+        // Subscriber
+        rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr sub_obs_poses_;
+
+        // Publisher
+        rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_local_map_;
+
+        // 各種オブジェクト
+        geometry_msgs::msg::PoseArray obs_poses_; // 障害物のポーズ配列
+        nav_msgs::msg::OccupancyGrid  local_map_; // ローカルマップ
+        rclcpp::TimerBase::SharedPtr timer_;  //タイマー宣言
+};
+
+#endif
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/bag/map/c_map.yaml
+================================================================================
+
+image: c_map.pgm
+mode: trinary
+resolution: 0.05
+origin: [-29.5, -8.0, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_goal_creator/package.xml
+================================================================================
+
+<?xml version="1.0"?>
+<package format="3">
+  <name>team_c_local_goal_creator</name>
+  <version>0.0.0</version>
+  <description>The team_c_local_goal_creator package</description>
+
+  <!-- One maintainer tag required, multiple allowed, one person per tag -->
+  <!-- Example:  -->
+  <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
+  <maintainer email="amsl@todo.todo">amsl</maintainer>
+
+
+  <!-- One license tag required, multiple allowed, one license per tag -->
+  <!-- Commonly used license strings: -->
+  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
+  <license>TODO</license>
+
+
+  <!-- Url tags are optional, but multiple are allowed, one per tag -->
+  <!-- Optional attribute type can be: website, bugtracker, or repository -->
+  <!-- Example: -->
+  <!-- <url type="website">http://wiki.ros.org/local_goal_creater</url> -->
+
+
+  <!-- Author tags are optional, multiple are allowed, one per tag -->
+  <!-- Authors do not have to be maintainers, but could be -->
+  <!-- Example: -->
+  <!-- <author email="jane.doe@example.com">Jane Doe</author> -->
+
+
+  <!-- The *depend tags are used to specify dependencies -->
+  <!-- Dependencies can be catkin packages or system dependencies -->
+  <!-- Examples: -->
+  <!-- Use depend as a shortcut for packages that are both build and exec dependencies -->
+  <!--   <depend>roscpp</depend> -->
+  <!--   Note that this is equivalent to the following: -->
+  <!--   <build_depend>roscpp</build_depend> -->
+  <!--   <exec_depend>roscpp</exec_depend> -->
+  <!-- Use build_depend for packages you need at compile time: -->
+  <!--   <build_depend>message_generation</build_depend> -->
+  <!-- Use build_export_depend for packages you need in order to build against this package: -->
+  <!--   <build_export_depend>message_generation</build_export_depend> -->
+  <!-- Use buildtool_depend for build tool packages: -->
+  <!--   <buildtool_depend>catkin</buildtool_depend> -->
+  <!-- Use exec_depend for packages you need at runtime: -->
+  <!--   <exec_depend>message_runtime</exec_depend> -->
+  <!-- Use test_depend for packages you need only for testing: -->
+  <!--   <test_depend>gtest</test_depend> -->
+  <!-- Use doc_depend for packages you need only for building documentation: -->
+  <!--   <doc_depend>doxygen</doc_depend> -->
+  <buildtool_depend>ament_cmake_ros</buildtool_depend>
+  <depend>ament_cmake_auto</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <!-- The export tag contains other, unspecified, tags -->
+  <export>
+    <!-- Other tools can request additional information be placed here -->
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_goal_creator/CMakeLists.txt
+================================================================================
+
+cmake_minimum_required(VERSION 3.5)
+project(team_c_local_goal_creator)
+
+# find dependencies
+find_package(ament_cmake_auto REQUIRED)
+# package.xmlのdependをチェックして自動的にfind_packageしてくれる
+ament_auto_find_build_dependencies()
+# 実行ファイルを作成する
+ament_auto_add_executable(${PROJECT_NAME}_node
+  src/local_goal_creator.cpp
+  src/local_goal_creator_node.cpp)
+# launchファイルをインストール（ament_package_indexが探せる場所に置く）
+install(DIRECTORY
+  DESTINATION share/${PROJECT_NAME}/
+)
+# ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
+ament_auto_package()
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_goal_creator/config/param/local_goal_creator.yaml
+================================================================================
+
+hz: 10 #####                   # ループ周期 [Hz]
+index_step: 1 #####            # １回で更新するインデックス数
+goal_index: 0 #####           # グローバルパス内におけるローカルゴールのインデックス
+target_dist_to_goal: 1.0 ##### # 現在位置-ゴール間の距離 [m]
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_goal_creator/src/local_goal_creator.cpp
+================================================================================
+
+#include "local_goal_creator/local_goal_creator.hpp"
+#include <cmath>
+
+LocalGoalCreator::LocalGoalCreator() : Node("LocalGoalCreator")
+{
+    // ### 初期値の設定 ###
+    // ループ周期 [Hz]
+    this->declare_parameter("hz", 10);
+    // １回で更新するインデックス数
+    this->declare_parameter("index_step", 1);
+    // グローバルパス内におけるローカルゴールのインデックス
+    this->declare_parameter("goal_index", 0);
+    // 現在位置-ゴール間の距離 [m]
+    this->declare_parameter("target_dist_to_goal", 2.0);
+
+    hz_ = this->get_parameter("hz").as_int();
+    index_step_ = this->get_parameter("index_step").as_int();
+    goal_index_ = this->get_parameter("goal_index").as_int();
+    // YAMLの target_dist_to_goal を target_dist_to_goal_ に格納
+    target_dist_to_goal_ = this->get_parameter("target_dist_to_goal").as_double();
+
+    // ### pubやsubの定義，tfの統合 ###
+    // -- パブリッシャーの作成(PointStamped型) --
+    // トピック名: "local_goal"
+    local_goal_pub_ = this->create_publisher<geometry_msgs::msg::PointStamped>("local_goal", 10);
+
+    // -- サブスクライバーの作成 --
+    // トピック名: "global_path"
+    // 実行する関数: pathCallback (この後、クラス内に定義する必要がある)
+    // グローバルパスを購読
+    path_sub_ = this->create_subscription<nav_msgs::msg::Path>(
+        "global_path", 10, std::bind(&LocalGoalCreator::pathCallback, this, std::placeholders::_1));
+    
+    // 自己位置を受け取る
+    // トピック名: "estimated_pose"
+    pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+        "estimated_pose", 10, std::bind(&LocalGoalCreator::poseCallback, this, std::placeholders::_1));
+
+    RCLCPP_INFO(this->get_logger(), "Local Goal Creator node has started.");
+}
+
+void LocalGoalCreator::poseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)//subのコールバック関数
+{
+    pose_ = *msg;
+}
+
+void LocalGoalCreator::pathCallback(const nav_msgs::msg::Path::SharedPtr msg)//subのコールバック関数
+{
+    path_ = *msg;
+    is_path_ = true;
+    // 新しいパスが来たら、追従開始インデックスをリセット
+    goal_index_ = 0;
+}
+
+int LocalGoalCreator::getOdomFreq()//hzを返す関数（無くてもいい）
+{
+    return hz_;
+}
+
+void LocalGoalCreator::process()//main文ので実行する関数
+{
+    // ### pathが読み込めた場合にpublishGoal関数を実行 ###
+    // パスを受信していない場合は処理をスキップ
+    if (!is_path_ || path_.poses.empty()) {
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "Waiting for Path...");
+        return;
+    }
+
+    publishGoal();
+}
+
+void LocalGoalCreator::publishGoal()
+{
+    // ### ゴールまでの距離の計算を行う ###
+    // 設定値に応じて，ゴール位置の変更を行う
+    // --- ローカルゴールの更新ロジック ---
+    // 現在位置と、パス上のターゲット点(goal_index)の距離を計算
+    // しきい値より近ければ、次の点へインデックスを進める
+    while (goal_index_ < (int)path_.poses.size() - 1) {
+        double dist = getDistance();
+        if (dist < target_dist_to_goal_) {
+            goal_index_ += index_step_;
+        } else {
+            break;
+        }
+    }
+
+    // 配列外参照を防ぐガード
+    if (goal_index_ >= (int)path_.poses.size()) {
+        goal_index_ = (int)path_.poses.size() - 1;
+    }
+
+    // --- 2. PointStamped 型のメッセージを作成 ---
+    geometry_msgs::msg::PointStamped point_msg;
+
+    // ヘッダー情報のコピー (frame_id を "map" などに合わせる)
+    point_msg.header.frame_id = path_.header.frame_id;
+    point_msg.header.stamp = this->get_clock()->now();
+
+    // 座標の代入 (PoseStamped の position 部分だけを抽出)
+    point_msg.point = path_.poses[goal_index_].pose.position;
+
+    // --- 3. パブリッシュ ---
+    local_goal_pub_->publish(point_msg);
+}
+
+double LocalGoalCreator::getDistance()//距離計算関数（使わなくても平気）
+{
+    // 現在のターゲット点と自己位置の直線距離を計算
+    double dx = path_.poses[goal_index_].pose.position.x - pose_.pose.position.x;
+    double dy = path_.poses[goal_index_].pose.position.y - pose_.pose.position.y;
+    
+    // std::hypot(x, y) は sqrt(x*x + y*y) と同等
+    return std::hypot(dx, dy);
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_goal_creator/src/local_goal_creator_node.cpp
+================================================================================
+
+#include "local_goal_creator/local_goal_creator.hpp"
+
+/*void LocalGoalCreator::process()
+{
+    // パスと自己位置が少なくとも1回は届いているか確認
+    if (!is_path_) {
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Waiting for path...");
+        return;
+    }
+    
+    publishGoal();
+} */
+
+int main(int argc, char* argv[])
+{
+    rclcpp::init(argc, argv); // ノードの初期化
+    auto node = std::make_shared<LocalGoalCreator>();
+    rclcpp::Rate loop_rate(node->getOdomFreq());
+    
+
+    while(rclcpp::ok()){
+        node->process();
+        rclcpp::spin_some(node);   // コールバック関数の実行
+        loop_rate.sleep(); // 周期が終わるまで待つ
+    }
+
+    return 0;
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_goal_creator/include/local_goal_creator/local_goal_creator.hpp
+================================================================================
+
+#ifndef LOCAL_GOAL_CREATOR_HPP
+#define LOCAL_GOAL_CREATOR_HPP
+
+#include <rclcpp/rclcpp.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+
+class LocalGoalCreator : public rclcpp::Node
+{
+public:
+    LocalGoalCreator();
+    void process();
+    int getOdomFreq();
+
+private:
+    void pathCallback(const nav_msgs::msg::Path::SharedPtr msg);
+    void poseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
+    void publishGoal();
+    double getDistance();
+
+    int hz_;
+    int index_step_;
+    int goal_index_;
+    double target_dist_to_goal_;
+    bool is_path_ = false;
+
+    //　Subscriber
+    rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
+
+    // Publisher
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr local_goal_pub_;
+
+
+    nav_msgs::msg::Path path_;
+    geometry_msgs::msg::PointStamped goal_;
+    geometry_msgs::msg::PoseStamped pose_;
+};
+
+#endif // LOCAL_GOAL_CREATOR_H
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/package.xml
+================================================================================
+
+<?xml version="1.0"?>
+<package format="2">
+  <name>team_c_global_path_planner</name>
+  <version>0.0.0</version>
+  <description>The team_c_global_path_planner package</description>
+  <maintainer email="amsl@todo.todo">amsl</maintainer>
+  <license>todo</license>
+
+  <buildtool_depend>ament_cmake_ros</buildtool_depend>
+
+  <depend>ament_cmake_auto</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>vector</depend>
+  <depend>math.h</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/CMakeLists.txt
+================================================================================
+
+cmake_minimum_required(VERSION 3.5)
+project(team_c_global_path_planner)
+
+# find dependencies
+find_package(ament_cmake_auto REQUIRED)
+# package.xmlのdependをチェックして自動的にfind_packageしてくれる
+ament_auto_find_build_dependencies()
+# 実行ファイルを作成する
+ament_auto_add_executable(${PROJECT_NAME}_node
+  src/global_path_planner.cpp
+  src/global_path_planner_node.cpp)
+# launchファイルをインストール（ament_package_indexが探せる場所に置く）
+install(DIRECTORY
+  launch
+  map
+  config
+  DESTINATION share/${PROJECT_NAME}/
+)
+# ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
+ament_auto_package()
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/launch/global_path_planner.launch.xml
+================================================================================
+
+<launch>
+  <node pkg="nav2_map_server" exec="map_server" name="map_server">
+    <param name="yaml_filename" value="$(find-pkg-share team_global_path_planner)/map/c_map.yaml"/>
+  </node>
+
+  <node pkg="nav2_lifecycle_manager" exec="lifecycle_manager" name="lifecycle_manager">
+    <param name="autostart" value="true"/>
+    <param name="node_names" value="['map_server']"/>
+  </node>
+
+  <node pkg="team_global_path_planner" exec="team_global_path_planner_node" name="team_global_path_planner_node" output="screen">
+    <param from="$(find-pkg-share team_global_path_planner)/config/param/global_path_planner.yaml"/>
+  </node>
+</launch>
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml
+================================================================================
+
+/**:
+  ros__parameters:
+    # デバッグ用
+    test_show: false
+    sleep_time: 0.001
+
+    # 経由点
+    way_points_x: [0.05, 16.5, 16.5, -17.5, -17.5, 0.05] ######
+    way_points_y: [0.0, 0.0, 14.1,  14.1,   0.0, 0.0] ######
+
+    # 車両マージン（ルンバの半径）
+    margin: 0.25 ###### //3.25篠田更新0.2→0.25
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/src/global_path_planner_node.cpp
+================================================================================
+
+#include "global_path_planner/global_path_planner.hpp"
+
+int main(int argc, char* argv[])
+{
+    rclcpp::init(argc, argv);
+
+    std::shared_ptr<Astar> astar = std::make_shared<Astar>();
+    rclcpp::spin(astar);
+    rclcpp::shutdown();
+
+    return 0;
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/src/global_path_planner.cpp
+================================================================================
+
+#include "global_path_planner/global_path_planner.hpp"
+#include <limits>
+
+using namespace std::chrono_literals;
+
+// デフォルトコンストラクタ
+// パラメータの宣言と取得
+Astar::Astar() : Node("team_global_path_planner_node"), clock_(RCL_ROS_TIME)
+{
+    // ###### パラメータの宣言 ######
+    this->declare_parameter<double>("sleep_time");
+    this->declare_parameter<double>("margin");
+    this->declare_parameter<bool>("test_show");
+    this->declare_parameter<std::vector<double>>("way_points_x");
+    this->declare_parameter<std::vector<double>>("way_points_y");
+
+    // ###### パラメータの取得 ######
+    this->get_parameter("sleep_time", sleep_time_);
+    this->get_parameter("margin", margin_);
+    this->get_parameter("test_show", test_show_);
+    this->get_parameter("way_points_x", way_points_x_);
+    this->get_parameter("way_points_y", way_points_y_);
+
+    // ###### global_path_とcurrent_node_のframe_id設定 ######
+    global_path_.header.frame_id = "map";
+    current_node_.header.frame_id = "map";
+    new_map_.header.frame_id = "map";
+
+    // dataサイズの確保
+    global_path_.poses.reserve(2000);
+
+    // ####### Subscriber #######
+    sub_map_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+        "map",
+        rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
+        std::bind(&Astar::map_callback, this, std::placeholders::_1)
+    );
+
+    // ###### Publisher ######
+    pub_path_ = this->create_publisher<nav_msgs::msg::Path>( // 計算した経路を発行
+        "global_path", 10
+    );
+
+    pub_node_point_ = this->create_publisher<geometry_msgs::msg::PointStamped>( // 可視化用ノード位置を発行
+        "node_point", 10
+    );
+
+    pub_current_path_ = this->create_publisher<nav_msgs::msg::Path>( // 現在のパスを発行
+        "current_path", 10
+    );
+
+    pub_new_map_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>( // 拡張後のマップを発行
+        "new_map",
+        rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable()
+    );
+
+}
+
+// mapのコールバック関数
+// msgを受け取り，map_に代入，その情報をそれぞれ取得
+// process()を実行
+void Astar::map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg)  //マップの読み込み
+{
+    // 1.msgを受け取り，代入
+    map_ = *msg;
+
+    // 2.情報の取得
+    height_ = map_.info.height;  // マップの高さ
+    width_ = map_.info.width;   // マップの幅
+    resolution_ = map_.info.resolution; // マップ解像度
+    origin_x_ = map_.info.origin.position.x;  // マップ原点
+    origin_y_ = map_.info.origin.position.y;  // マップ原点
+
+    // 3.map取得完了フラグ
+    map_checker_ = true;
+
+    // 4.process()を実行
+    process();
+}
+
+// マップ全体の障害物を拡張処理（new_map_をpublishする）
+void Astar::obs_expander()
+{
+    // new_map_の中身をmap_で初期化
+    new_map_ = map_;
+
+    // map_で障害物のとき障害物を拡張
+    for(int i  = 0; i  < width_ * height_; i++){
+        if(map_.data[i] == 100){
+            obs_expand(i);
+        }
+    }
+
+    pub_new_map_->publish(new_map_);
+}
+
+// 指定されたインデックスの障害物を拡張（margin_length分）
+void Astar::obs_expand(const int index)
+{
+    // indexをx,y座標に変換
+    int x = index % width_;
+    int y = index / width_;
+
+    // margin_をメートル単位からセル単位に変換
+    const int cell_margin_ = std::ceil(margin_ / resolution_);
+    for(int i = x - cell_margin_; i <= x + cell_margin_; i++){
+        for(int j = y - cell_margin_; j <= y + cell_margin_; j++){
+            // マップの境界をチェック
+            if(i < 0 || j < 0 || i >= width_ || j >= height_ || new_map_.data[(j * width_ + i)] == 100){
+                continue;
+            }
+            // 円形にマップを拡張
+            int distance2 = ((i - x)*(i - x) + (j - y)*(j - y));
+            if (distance2 <= (cell_margin_*cell_margin_)){
+                new_map_.data[(j * width_ + i)] = 100;
+            }
+        }
+    }
+}
+
+// ヒューリスティック関数の計算
+double Astar::make_heuristic(const Node_ node)
+{
+    double dx = static_cast<double>(goal_node_.x - node.x);
+    double dy = static_cast<double>(goal_node_.y - node.y);
+
+    return std::sqrt(dx * dx + dy * dy);    
+}
+
+// スタートとゴールの取得（mからグリッド単位への変換も行う）
+Node_ Astar::set_way_point(int phase)
+{
+    Node_ way_point;
+        int tx = static_cast<int>((way_points_x_[phase] - origin_x_) / resolution_);
+        int ty = static_cast<int>((way_points_y_[phase] - origin_y_) / resolution_);
+        if(tx < 0)tx = 0; if(tx >= width_)tx = width_ - 1;
+        if(ty < 0)ty = 0; if(ty >= height_)ty = height_ - 1;
+        way_point.x = tx;
+        way_point.y = ty;
+        way_point.parent_x = -1;
+        way_point.parent_y = -1;
+        way_point.f = 0.0;
+    return way_point;
+}
+
+// ノードをたどり，waypoint間のパスを作成．その後グローバルパスに追加
+// 参考：push_back(...) https://cpprefjp.github.io/reference/vector/vector/push_back.html
+void Astar::create_path(Node_ node)
+{
+    nav_msgs::msg::Path partial_path;
+    
+    // 1.親ノードをたどり，ゴールからスタートまでをリストアップ
+    while(node.parent_x != -1 && node.parent_y != -1){
+        partial_path.poses.push_back(node_to_pose(node));
+
+        // 親の座標を頼りにCloseリストから親ノードを探し出す
+        int parent_key = node.parent_y * width_ + node.parent_x;
+        auto it = close_map_.find(parent_key);
+        if(it == close_map_.end()) break;
+        node = it->second;
+    }
+    
+    // 2.最後にスタートノードを追加
+    partial_path.poses.push_back(node_to_pose(node));
+    // 3.順序の反転
+    std::reverse(partial_path.poses.begin(), partial_path.poses.end());
+
+    // 4.グローバルパスへ追加
+    global_path_.poses.insert(global_path_.poses.end(), partial_path.poses.begin(), partial_path.poses.end());
+
+}
+
+// ノード座標（グリッド）をgeometry_msgs::msg::PoseStamped（m単位のワールド座標系）に変換
+geometry_msgs::msg::PoseStamped Astar::node_to_pose(const Node_ node)
+{
+    geometry_msgs::msg::PoseStamped pose;
+    pose.header.frame_id = "map";
+    pose.header.stamp = clock_.now();
+
+    pose.pose.position.x = origin_x_ + (node.x * resolution_) + (resolution_ / 2.0);
+    pose.pose.position.y = origin_y_ + (node.y * resolution_) + (resolution_ / 2.0);
+    pose.pose.position.z = 0.0;
+    pose.pose.orientation.w = 1.0;
+
+    return pose;
+}
+
+
+// openリスト内で最もf値が小さいノードを取得する関数
+Node_ Astar::select_min_f()
+{
+    Node_ best;
+    double min_f = std::numeric_limits<double>::max();
+    for(const auto& [key, node] : open_map_){
+        if(node.f < min_f){
+            min_f = node.f;
+            best  = node;
+        }
+    }
+    return best;
+}
+
+// スタートノードの場合，trueを返す
+bool Astar::check_start(const Node_ node)
+{
+    return check_same_node(node, start_node_);
+}
+
+// ゴールノードの場合，trueを返す
+bool Astar::check_goal(const Node_ node)
+{
+    return check_same_node(node, goal_node_);
+}
+
+// 2つが同じノードである場合，trueを返す
+bool Astar::check_same_node(const Node_ n1, const Node_ n2)
+{
+    return (n1.x == n2.x && n1.y == n2.y);
+}
+
+// 指定したリストに指定のノードが含まれるか検索
+//（含まれる場合はインデックス番号を返し，含まれない場合は-1を返す）
+int Astar::check_list(const Node_ target_node, std::vector<Node_>& set)
+{
+    for(size_t i = 0; i < set.size(); i++){
+        if(check_same_node(target_node, set[i])) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+// open_map_から削除して close_map_ に移動する関数
+void Astar::swap_node(const Node_ node)
+{
+    int key = node.y * width_ + node.x;
+    open_map_.erase(key);
+    close_map_[key] = node;
+}
+
+// 指定のノードが障害物である場合，trueを返す
+bool Astar::check_obs(const Node_ node)
+{
+    //　マップの範囲内かのチェック(範囲外は障害物として扱う)
+    if(node.x < 0 || node.x >= width_ || node.y < 0 || node.y >= height_){
+        return true;
+    }
+    
+    // 障害物かどうかの判定
+    int index = node.y * width_ + node.x;
+    if(new_map_.data[index] >= 50 || new_map_.data[index] == -1){
+        return true;
+    }
+
+    return false;
+}
+
+// 隣接ノードを基にOpenリスト・Closeリストを更新
+// 隣接ノードを計算し，障害物を避けつつ，リスト内のノードを適切に追加・更新
+// 複数の変数への代入はstd::tie(...)を使用すると便利 https://minus9d.hatenablog.com/entry/2015/05/24/133253
+void Astar::update_list(const Node_ node)
+{
+    // 隣接ノードを宣言
+    std::vector<Node_> neighbor_nodes;
+    create_neighbor_nodes(node, neighbor_nodes);
+
+    for(auto& neighbor : neighbor_nodes){
+        auto[list_id, index] = search_node(neighbor);
+        // 1.すでに探索済の場合はスキップ
+        if(list_id == 2) continue;
+
+        // 2.コストの確定
+        double g = neighbor.g;
+        double h = make_heuristic(neighbor);
+        neighbor.f = g + h;
+
+        // 3.リストにない新規ノードの場合
+        if(list_id == -1){
+            open_map_[neighbor.y * width_ + neighbor.x] = neighbor;
+        }
+
+        // 4.すでにOpenリストにある場合
+        else if(list_id == 1){
+            if(neighbor.f < open_map_[index].f){
+                open_map_[neighbor.y * width_ + neighbor.x] = neighbor;
+            }
+        }
+    }
+}
+
+// 現在のノードを基に隣接ノードを作成
+void Astar::create_neighbor_nodes(const Node_ node, std::vector<Node_>&  neighbor_nodes)
+{
+    // 動作モデルの作成
+    std::vector<Motion_> motion_list;
+    get_motion(motion_list);
+
+    for(const auto& m : motion_list){
+        Node_ neighbor = get_neighbor_node(node, m);
+        if(!check_obs(neighbor)){
+            neighbor_nodes.push_back(neighbor);
+        }
+
+    }
+}
+
+// 動作モデルを作成（前後左右，斜めの8方向）
+void Astar::get_motion(std::vector<Motion_>& list)
+{
+    list.push_back(motion(  1,  0, 1)); // 前
+    list.push_back(motion( -1,  0, 1)); // 後
+    list.push_back(motion(  0,  1, 1)); // 左
+    list.push_back(motion(  0, -1, 1)); // 右
+    list.push_back(motion(  1,  1, 1.4142)); // 左前
+    list.push_back(motion(  1, -1, 1.4142)); // 右前
+    list.push_back(motion( -1,  1, 1.4142)); // 左後
+    list.push_back(motion( -1, -1, 1.4142)); // 右後
+}
+
+// 与えられたdx, dy, costを基にモーション（移動）を作成
+// 隣接したグリッドに移動しない場合はエラーメッセージを出力して終了
+Motion_ Astar::motion(const int dx,const int dy,const int cost)
+{
+    if(std::abs(dx) > 1 || std::abs(dy) > 1 || (dx == 0 && dy == 0)){
+        RCLCPP_ERROR(get_logger(), "Invalid motion: dx = %d, dy = %d", dx, dy);
+        exit(1);
+    }
+
+    Motion_ m;
+    m.dx = dx;
+    m.dy = dy;
+    m.cost = cost;
+    return m;
+}
+
+// 現在のノードと与えられたモーションを基に隣接ノードを計算し，その隣接ノードのg値と親ノードを更新して返す
+Node_ Astar::get_neighbor_node(const Node_ node, const Motion_ motion)
+{
+    Node_ neighbor_node;
+
+    // 座標の更新
+    neighbor_node.x = node.x + motion.dx;
+    neighbor_node.y = node.y + motion.dy;
+
+    // 親ノードの記録
+    neighbor_node.parent_x = node.x;
+    neighbor_node.parent_y = node.y;
+
+    // g値の計算
+    neighbor_node.g = node.g + motion.cost;
+
+    return neighbor_node;
+}
+
+// 指定されたノードがOpenリストまたはCloseリストに含まれているかを調べ，結果をインデックスとともに返す
+// 1はOpenリスト，2はCloseリストにノードが含まれていることを示す
+// -1はどちらのリストにもノードが含まれていないことを示す
+std::tuple<int, int> Astar::search_node(const Node_ node)
+{
+    int key = node.y * width_ + node.x;
+
+    // 1.Openmapを検索
+    if(open_map_.count(key))  return {1, key};
+    
+    // 2.Closemapを検索
+    if(close_map_.count(key)) return {2, key};
+    
+    // 3.どちらにも含まれていない
+    return {-1, -1};
+}
+
+
+// 親ノードかの確認
+bool Astar::check_parent(const int index, const Node_ node)
+{
+    return (index == node.parent_y * width_ + node.parent_x);
+}
+
+
+
+// 指定リスト内のノード検索
+// 同一のノードが見つかればそのインデックスを返す
+// 見つからなければ-1を返す
+int Astar::search_node_from_list(const Node_ node, std::vector<Node_>& list)
+{
+    for(size_t i = 0; i < list.size(); i++){
+        if(check_same_node(node, list[i])) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+
+// ［デバック用］指定されたノードの位置をRvizに表示
+// test_show_がtrueの場合，ノードの座標をワールド座標系に変換し
+// そのノードの情報をRvizにパブリッシュ
+void Astar::show_node_point(const Node_ node)
+{
+    // test_show_ パラメータが false の場合は何もしない（負荷軽減）
+    if (!test_show_) return;
+
+    geometry_msgs::msg::PointStamped point;
+    point.header.frame_id = "map";
+    point.header.stamp = clock_.now();
+
+    // グリッド座標をワールド座標(m)に変換
+    point.point.x = origin_x_ + (node.x * resolution_) + (resolution_ / 2.0);
+    point.point.y = origin_y_ + (node.y * resolution_) + (resolution_ / 2.0);
+    point.point.z = 0.5; // 地面より少し浮かせて表示
+
+    pub_node_point_->publish(point);
+}
+
+// ［デバック用］指定されたパスをRvizに表示
+// test_show_がtrueの場合，パスのフレームIDを"map"に設定し
+// パス情報をRvizにパブリッシュ
+void Astar::show_path(nav_msgs::msg::Path& current_path)
+{
+    if (!test_show_) return;
+
+    current_path.header.frame_id = "map";
+    current_path.header.stamp = clock_.now();
+
+    pub_current_path_->publish(current_path);
+}
+
+// 実行時間を表示（スタート時間beginを予め設定する）
+void Astar::show_exe_time()
+{
+    RCLCPP_INFO_STREAM(get_logger(), "Duration = " << std::fixed << std::setprecision(2) << clock_.now().seconds() - begin_.seconds() << "s");
+}
+
+
+
+// 経路計画を行う関数
+// 目的地までの経路をA*アルゴリズムを用いて計算し，グローバルパスを作成
+// 各フェーズ（ウェイポイント間）について，OpenリストとCloseリストを操作しながら経路を探索
+void Astar::planning()
+{
+    begin_ = clock_.now();
+    const int total_phase = way_points_x_.size();
+
+    start_node_ = set_way_point(0);
+
+    // ###### ウェイポイント間の経路探索 ######
+    for(int phase = 1; phase < total_phase; phase++){
+        // 1.各フェーズの初期化
+        open_map_.clear();
+        close_map_.clear();
+        goal_node_ = set_way_point(phase);
+
+        open_map_[start_node_.y * width_ + start_node_.x] = start_node_;
+
+        // 2.A* メインループ
+        while(!open_map_.empty()){
+            Node_ current = select_min_f();
+
+            // ###### デバッグポイント A: 探索最前線の表示 ######
+            // いま「検討中」の場所をRVizに表示する
+            show_node_point(current);
+
+            if(check_goal(current)){
+                create_path(current);
+
+                // ###### デバッグポイント B: フェーズ完了後のパス表示 ######
+                // その区間のパスが完成した瞬間に表示を更新する
+                pub_path_->publish(global_path_);
+
+                start_node_ = current;
+                break;
+            }
+            swap_node(current);
+            update_list(current);
+        }
+    }
+    pub_path_->publish(global_path_);
+
+    show_exe_time();
+    RCLCPP_INFO_STREAM(get_logger(), "COMPLITE ASTAR PROGLAM");
+    //exit(0);
+}
+
+
+// map_callback()関数で実行する関数
+// A*アルゴリズムを実行する前にマップのロードをチェック
+// マップが読み込まれた後に壁判定と経路計画を実行
+void Astar::process()
+{
+    RCLCPP_INFO_STREAM(get_logger(), "process is starting...");
+
+    if(planning_done_) return;
+    
+    if(!map_checker_){
+    RCLCPP_INFO_STREAM(get_logger(), "NOW LOADING...");
+    }else
+    {
+        RCLCPP_INFO_STREAM(get_logger(), "NOW LOADED MAP");
+        obs_expander(); // 壁の拡張
+        planning(); // グローバルパスの作成
+        planning_done_ = true;
+    }
+
+}
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/include/global_path_planner/global_path_planner.hpp
+================================================================================
+
+#ifndef GLOBAL_PATH_PLANNER_HPP
+#define GLOBAL_PATH_PLANNER_HPP
+
+#include <rclcpp/rclcpp.hpp>
+#include <functional>
+#include <memory>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
+#include <vector>
+#include <unordered_map>
+#include <math.h>
+
+// =========================
+// 構造体定義
+// =========================
+
+// ノード構造体（経路探索で使用）
+struct Node_ {
+    int    x = 0;
+    int    y = 0;
+    int    parent_x = -1;
+    int    parent_y = -1;
+    double g = 0.0;
+    double f = 0.0;
+};
+
+// モーション構造体（移動方向とコストを定義）
+struct Motion_ {
+    int dx;
+    int dy;
+    double cost;
+};
+
+// =========================
+// A*アルゴリズムクラス
+// =========================
+class Astar : public rclcpp::Node {
+public:
+    Astar();        // デフォルトコンストラクタ
+
+private:
+    // ----- コールバック関数 -----
+    void map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg);  // マップデータを受信し処理
+
+    // ----- 経路探索関連関数 -----
+    void obs_expand(const int index);                // 指定されたインデックスの障害物を拡張
+    double make_heuristic(const Node_ node);         // ノードのヒューリスティック値を計算
+    Node_ set_way_point(const int phase);            // スタート・ゴールノードの設定
+    void create_path(Node_ node);                    // ノードをたどり，パスを作成
+    geometry_msgs::msg::PoseStamped node_to_pose(const Node_ node);  // ノード情報を座標へ変換
+    void swap_node(const Node_ node); // ノードをリスト間で移動
+    int check_list(const Node_ target_node, std::vector<Node_>& set); // 指定リスト内のノード検索（インデックスを取得）
+    void update_list(const Node_ node);              // 隣接ノードを探索しリストを更新
+    void create_neighbor_nodes(const Node_ node, std::vector<Node_>& nodes); // 指定ノードの隣接ノードを作成
+    void get_motion(std::vector<Motion_>& motion);   // 動作モデル（移動方向とコスト）を定義
+    Motion_ motion(const int dx, const int dy, const int cost);  // モーション構造体を作成
+    Node_ get_neighbor_node(const Node_ node, const Motion_ motion); // 指定モーションを適用したノードを取得
+    std::tuple<int, int> search_node(const Node_ node);  // 指定ノードの検索（座標取得）
+    int search_node_from_list(const Node_ node, std::vector<Node_>& list);  // 指定リスト内のノード検索
+
+    // ----- ノードチェック関数 -----
+    bool check_start(const Node_ node);  // 指定ノードがスタートノードか判定
+    bool check_goal(const Node_ node);   // 指定ノードがゴールノードか判定
+    bool check_same_node(const Node_ n1, const Node_ n2);  // 2つのノードが同一か判定
+    bool check_obs(const Node_ node);    // 指定ノードが障害物か判定
+    bool check_parent(const int index, const Node_ node); // 指定ノードが親ノードか確認
+
+    // ----- 経路計画関連関数 -----
+    void process(); // mapを受け取ったら実行する関数（obs_expaner，planningを実行する）
+    void obs_expander();  // マップ全体の障害物を拡張処理
+    void planning();      // A*アルゴリズムによる経路計画を実行
+    Node_ select_min_f(); // openリスト内で最小のf値を持つノードを選択
+
+    // ----- デバッグ用関数 -----
+    void show_node_point(const Node_ node);  // Rviz上でノードをポイントとして可視化
+    void show_path(nav_msgs::msg::Path& current_path);  // Rviz上で経路を可視化
+    void show_exe_time();  // 経路計画の実行時間を表示
+    bool planning_done_ = false;
+
+    // =========================
+    // ROS関連メンバ変数
+    // =========================
+
+    // Subscriber
+    rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_map_; // マップ購読
+
+    // Publisher
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_path_; // 計算した経路を発行
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_node_point_; // 可視化用ノード位置を発行
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_current_path_; // 現在のパスを発行
+    rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_new_map_; // 拡張後のマップを発行
+
+    // =========================
+    // 変数定義
+    // =========================
+
+    // 基本設定
+    double sleep_time_; // デバッグ用スリープ時間 [s]
+    double margin_; // 障害物拡張マージン [m]
+
+    // ノード情報
+    Node_ start_node_;  // 開始ノード
+    Node_ goal_node_;   // 目標ノード
+    std::unordered_map<int, Node_> open_map_;   // openリスト  (key = y*width+x)
+    std::unordered_map<int, Node_> close_map_;  // closeリスト (key = y*width+x)
+
+    // マップ情報
+    double origin_x_;  // 原点のx座標
+    double origin_y_;  // 原点のy座標
+    std::vector<double> way_points_x_;  // 経由点(x座標)
+    std::vector<double> way_points_y_;  // 経由点(y座標)
+    bool map_checker_ = false; // マップ取得の確認フラグ
+    bool test_show_; // デバッグ用フラグ
+
+    // マップ詳細
+    int height_;  // マップの高さ
+    int width_;   // マップの幅
+    double resolution_; // マップ解像度
+    Node_ origin_;  // マップ原点
+    std::vector<std::vector<int>> map_grid_; // グリッドマップ
+
+    // 時間計測
+    rclcpp::Clock clock_; // 時間計測用
+    rclcpp::Time begin_;  // 開始時間
+
+    // 経路データ
+    nav_msgs::msg::Path global_path_; // グローバルパス
+    nav_msgs::msg::OccupancyGrid map_; // マップデータ
+    nav_msgs::msg::OccupancyGrid new_map_; // 拡張マップ
+    geometry_msgs::msg::PointStamped current_node_; // 現在のノード
+};
+
+#endif
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/map/c_map.yaml
+================================================================================
+
+image: c_map.pgm
+mode: trinary
+resolution: 0.05
+origin: [-29.5, -3.32, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/package.xml
+================================================================================
+
+<?xml version="1.0"?>
+<package format="3">
+  <name>c_localizer</name>
+  <version>0.0.0</version>
+  <description>the c_localizer package</description>
+  <maintainer email="amsl@todo.todo">amsl</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake_ros</buildtool_depend>
+
+  <depend>ament_cmake_auto</depend>
+  <depend>rclcpp</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>random</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/CMakeLists.txt
+================================================================================
+
+# /home/amsl/ros2_ws/src/chibi26_c/localizer/CMakeLists.txt
+cmake_minimum_required(VERSION 3.8)
+project(c_localizer)
+
+# find dependencies
+find_package(ament_cmake_auto REQUIRED)
+# package.xmlのdependをチェックして自動的にfind_packageしてくれる
+ament_auto_find_build_dependencies()
+# 実行ファイルを作成する
+ament_auto_add_executable(${PROJECT_NAME}_node
+  src/localizer.cpp
+  src/localizer_node.cpp
+  src/odom_model.cpp
+  src/particle.cpp
+  src/pose.cpp)
+# launchファイルをインストール（ament_package_indexが探せる場所に置く）
+install(DIRECTORY
+  launch
+  config
+  DESTINATION share/${PROJECT_NAME}/
+)
+# ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
+ament_auto_package()
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/config/param/localizer.yaml
+================================================================================
+
+# /home/amsl/ros2_ws/src/chibi26_c/localizer/config/param/localizer.yaml
+node_name1:
+  ros__parameters:
+
+    # 基本設定
+    hz: 10              # ループ周期 [Hz]
+    particle_num: 500   # パーティクルの個数 [-]
+    max_particle_num: 1000   #パーティクルの最大個数
+    min_particle_num: 100   #パーティクルの最小個数
+    move_dist_th: 0.05 # ロボットの移動開始判断用（スタートからの距離の閾値）[m]
+
+    # 初期ポーズ関連
+    init_x: 0.0       # 初期位置 [m]
+    init_y: 0.0       # 初期位置 [m]
+    init_yaw: 0.0     # 初期姿勢 [rad]
+    init_x_dev: 0.50  # 初期位置xの標準偏差 [m]
+    init_y_dev: 0.65  # 初期位置yの標準偏差 [m]
+    init_yaw_dev: 0.5 # 初期姿勢の標準偏差 [rad]
+
+    # リセット関連
+    alpha_th: 0.0017        # リセットに関する平均尤度の閾値 [-]
+    reset_count_limit: 5    # 連続リセットの回数の上限 [-]
+    expansion_x_dev: 0.05   # 膨張リセットの位置xの標準偏差 [m]
+    expansion_y_dev: 0.05   # 膨張リセットの位置yの標準偏差 [m]
+    expansion_yaw_dev: 0.01 # 膨張リセットの姿勢の標準偏差 [rad]
+
+    # センサ関連
+    laser_step: 10           # 何本ずつレーザを見るか(全1080本)[-]
+    sensor_noise_ratio: 0.03 # 距離に対するセンサノイズ比 [-]
+
+    # --- 柱に関する角度範囲の配列 [rad] ---
+    # 以下が無視される
+    # [0] < angle < [1], [2] < angle
+    # [num] -> num:index
+    # [min1, max1, min2, max2, min3, max3, min4, max4]
+    # 右後, 左後, 左前, 右前 の順（目安）
+    ignore_angle_range_list: [
+        -2.50, -2.20,  # 右後ろの柱
+         2.20,  2.50,  # 左後ろの柱
+         0.65,  0.95,  # 左前の柱
+        -0.95, -0.65   # 右前の柱
+    ]
+    
+    # フラグ
+    flag_init_noise: true # 初期位置にノイズを加えるか
+    flag_broadcast: true  # tf情報を含むbagファイルを使うときはfalse
+    flag_reverse: false   # 初期姿勢を逆にするか
+    is_visible: true      # パーティクルクラウドを表示（パブリッシュ）するか
+
+    # ===== クラスOdomModel =====
+    ff: 0.35   # 直進1[m]で生じる道のりのばらつきの標準偏差 [m]
+    fr: 0.0005 # 回転1[rad]で生じる道のりのばらつきの標準偏差 [m]
+    rf: 0.25   # 直進1[m]で生じる向きのばらつきの標準偏差 [rad]
+    rr: 0.2    # 回転1[rad]で生じる向きのばらつきの標準偏差 [rad]
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/src/localizer_node.cpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/src/localizer_node.cpp
+#include "localizer/localizer.hpp"
+
+int main(int argc, char *argv[])
+{
+	rclcpp::init(argc, argv);
+	auto node = std::make_shared<Localizer>();
+	rclcpp::Rate loop_rate(node->getOdomFreq());
+    node->initialize();
+	while(rclcpp::ok())
+	{
+		node->process();
+		rclcpp::spin_some(node);
+	    loop_rate.sleep();
+	}
+	rclcpp::shutdown();
+	return 0;
+}
+
+
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/src/pose.cpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/src/pose.cpp
+#include "localizer/pose.hpp"
+
+// デフォルトコンストラクタ
+Pose::Pose() : x_(0.0), y_(0.0), yaw_(0.0)
+{
+}
+
+// コンストラクタ
+Pose::Pose(const double x, const double y, const double yaw) : x_(x), y_(y), yaw_(yaw)
+{
+}
+
+// 代入演算子
+Pose& Pose::operator =(const Pose& pose)
+{
+    if (this != &pose) {
+        this->x_ = pose.x_;
+        this->y_ = pose.y_;
+        this->yaw_ = pose.yaw_;
+    }
+    return *this;
+}
+
+// 複合代入演算子/= (平均計算などで使用)
+Pose& Pose::operator /=(const double a)
+{
+    if (a != 0.0) {
+        this->x_ /= a;
+        this->y_ /= a;
+        this->yaw_ /= a;
+    }
+    return *this;
+}
+
+// setter
+void Pose::set(const double x, const double y, const double yaw)
+{
+    x_ = x;
+    y_ = y;
+    yaw_ = yaw;
+}
+
+// パーティクルの移動
+// ノイズを加えて，移動させる
+void Pose::move(double length, double direction, double rotation, const double fw_noise, const double rot_noise)
+{
+    // 移動距離と回転角にノイズを加える
+    double dist = length + fw_noise;
+    double rot  = rotation + rot_noise;
+
+    // 現在の向き(yaw_)と移動の向き(direction)から、新しい座標を計算
+    // directionは機体正面に対する移動方向（通常、直進なら0）
+    x_ += dist * std::cos(yaw_ + direction);
+    y_ += dist * std::sin(yaw_ + direction);
+
+    // 向きを更新
+    yaw_ += rot;
+
+    // 角度を -M_PI ~ M_PI の範囲に正規化
+    normalize_angle();
+}
+
+// 適切な角度(-M_PI ~ M_PI)に変更
+void Pose::normalize_angle()
+{
+    while (yaw_ > M_PI)  yaw_ -= 2.0 * M_PI;
+    while (yaw_ < -M_PI) yaw_ += 2.0 * M_PI;
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/src/odom_model.cpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/src/odom_model.cpp
+#include "localizer/odom_model.hpp"
+
+// デフォルトコンストラクタ
+OdomModel::OdomModel() {}
+
+// コンストラクタ
+OdomModel::OdomModel(const double ff, const double fr, const double rf, const double rr)
+    : engine_(seed_gen_()), std_norm_dist_(0.0, 1.0), fw_dev_(0.0), rot_dev_(0.0)
+{
+    // 各移動パラメータに対する分散（標準偏差の2乗）をあらかじめ計算
+    fw_var_per_fw_  = ff * ff;   // 直進1mあたりの直進方向の分散
+    fw_var_per_rot_ = fr * fr;   // 回転1radあたりの直進方向の分散
+    rot_var_per_fw_ = rf * rf;   // 直進1mあたりの回転方向の分散
+    rot_var_per_rot_ = rr * rr;  // 回転1radあたりの回転方向の分散
+}
+
+// 代入演算子
+OdomModel& OdomModel::operator =(const OdomModel& model)
+{
+    if (this != &model) {
+        this->fw_var_per_fw_   = model.fw_var_per_fw_;
+        this->fw_var_per_rot_  = model.fw_var_per_rot_;
+        this->rot_var_per_fw_  = model.rot_var_per_fw_;
+        this->rot_var_per_rot_ = model.rot_var_per_rot_;
+        this->fw_dev_          = model.fw_dev_;
+        this->rot_dev_         = model.rot_dev_;
+        // 乱数エンジンは各インスタンスで独立して保持
+    }
+    return *this;
+}
+
+// 並進，回転に関する標準偏差の設定
+void OdomModel::set_dev(const double length, const double angle)
+{
+    // 移動距離(length)と回転角(angle)の絶対値に基づき、現在の移動に伴うノイズの標準偏差を算出
+    // 分散 = (d1*d1*|dist| + d2*d2*|deg|) の平方根をとる
+    fw_dev_  = std::sqrt(fw_var_per_fw_ * std::abs(length) + fw_var_per_rot_ * std::abs(angle));
+    rot_dev_ = std::sqrt(rot_var_per_fw_ * std::abs(length) + rot_var_per_rot_ * std::abs(angle));
+}
+
+// 直進に関するノイズ（fw_dev_）の取得
+double OdomModel::get_fw_noise()
+{
+    // 平均0、標準偏差fw_dev_の正規分布から乱数を生成
+    return fw_dev_ * std_norm_dist_(engine_);
+}
+
+// 回転に関するノイズ（rot_dev_）の取得
+double OdomModel::get_rot_noise()
+{
+    // 平均0、標準偏差rot_dev_の正規分布から乱数を生成
+    return rot_dev_ * std_norm_dist_(engine_);
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/src/particle.cpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/src/particle.cpp
+#include "localizer/particle.hpp"
+
+// デフォルトコンストラクタ
+Particle::Particle() : pose_(0.0, 0.0, 0.0), weight_(0.0)
+{
+}
+
+// コンストラクタ
+Particle::Particle(const double x, const double y, const double yaw, const double weight) 
+    : pose_(x, y, yaw), weight_(weight)
+{
+}
+
+// 代入演算子
+Particle& Particle::operator =(const Particle& p)
+{
+    if (this != &p) {
+        this->pose_ = p.pose_;
+        this->weight_ = p.weight_;
+    }
+    return *this;
+}
+
+// setter
+void Particle::set_weight(const double weight)
+{
+    weight_ = weight;
+}
+
+// 尤度関数
+double Particle::likelihood(const nav_msgs::msg::OccupancyGrid& map, const sensor_msgs::msg::LaserScan& laser,
+        const double sensor_noise_ratio, const int laser_step, const std::vector<double>& ignore_angle_range_list)
+{
+    double L = 0.0; 
+    int count = 0;
+
+    for(int i=0; i<(int)laser.ranges.size(); i+=laser_step)
+    {
+        double angle = laser.angle_min + i * laser.angle_increment;
+        
+        // 柱などの除外範囲チェック
+        if(is_ignore_angle(angle, ignore_angle_range_list)) continue;
+
+        double measured_dist = laser.ranges[i];
+        if(measured_dist < laser.range_min || measured_dist > laser.range_max) continue;
+
+        // 地図上の期待距離を算出
+        double expected_dist = calc_dist_to_wall(pose_.x(), pose_.y(), pose_.yaw() + angle, map, laser.range_max, sensor_noise_ratio);
+
+        // ガウス分布（正規分布）による評価
+        // センサノイズは距離に比例すると仮定
+        double sigma = measured_dist * sensor_noise_ratio;
+        L += norm_pdf(measured_dist, expected_dist, sigma);
+        count++;
+    }
+
+    return (count > 0) ? (L / count) : 0.0;
+}
+
+// 柱がある範囲か判定
+bool Particle::is_ignore_angle(double angle, const std::vector<double>& ignore_angle_range_list)
+{
+    for(size_t i=0; i<ignore_angle_range_list.size(); i+=2)
+    {
+        if(angle >= ignore_angle_range_list[i] && angle <= ignore_angle_range_list[i+1]) return true;
+    }
+    return false;
+}
+
+// 壁までの距離を算出（レイキャスティング）
+double Particle::calc_dist_to_wall(double x, double y, const double laser_angle, const nav_msgs::msg::OccupancyGrid& map,
+        const double laser_range, const double sensor_noise_ratio)
+{
+    const double search_step = map.info.resolution;
+    const double search_limit = laser_range;
+
+    for(double dist=0.0; dist<search_limit; dist+=search_step)
+    {
+        double target_x = x + dist * std::cos(laser_angle);
+        double target_y = y + dist * std::sin(laser_angle);
+
+        int index = xy_to_grid_index(target_x, target_y, map.info);
+
+        // マップ外または未知領域（-1）の場合
+        if(!in_map(index, map.data.size()) || map.data[index] == -1)
+        {
+            return search_limit * 2.0;
+        }
+
+        // 壁（100）を発見した場合
+        if(map.data[index] == 100)
+        {
+            return dist;
+        }
+    }
+    
+    // 壁が見つからなかった場合
+    return search_limit * 5.0;
+}
+
+// 座標からグリッドのインデックスを返す
+int Particle::xy_to_grid_index(const double x, const double y, const nav_msgs::msg::MapMetaData& map_info)
+{
+    int x_grid = std::floor((x - map_info.origin.position.x) / map_info.resolution);
+    int y_grid = std::floor((y - map_info.origin.position.y) / map_info.resolution);
+    
+    return y_grid * map_info.width + x_grid;
+}
+
+// マップ内か判定
+bool Particle::in_map(const int grid_index, const int map_data_size)
+{
+    return (grid_index >= 0 && grid_index < map_data_size);
+}
+
+// 確率密度関数（正規分布）
+double Particle::norm_pdf(const double x, const double mean, const double stddev)
+{
+    return (1.0 / (std::sqrt(2.0 * M_PI) * stddev)) * std::exp(-std::pow(x - mean, 2.0) / (2.0 * std::pow(stddev, 2.0)));
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/src/localizer.cpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/src/localizer.cpp
+#include "localizer/localizer.hpp"
+
+// デフォルトコンストラクタ
+Localizer::Localizer() : Node("c_localizer"), engine_(seed_gen_())
+{ 
+    // パラメータの宣言
+    this->declare_parameter("hz", 10);
+    this->declare_parameter("particle_num", 500);
+    this->declare_parameter("max_particle_num", 1000);
+    this->declare_parameter("min_particle_num", 100);
+    this->declare_parameter("move_dist_th", 0.05);
+    this->declare_parameter("init_x", 0.0);
+    this->declare_parameter("init_y", 0.0);
+    this->declare_parameter("init_yaw", 0.0);
+    this->declare_parameter("init_x_dev", 0.5);
+    this->declare_parameter("init_y_dev", 0.5);
+    this->declare_parameter("init_yaw_dev", 0.2);
+    this->declare_parameter("alpha_th", 0.0017);
+    this->declare_parameter("reset_count_limit", 5);
+    this->declare_parameter("expansion_x_dev", 0.05);
+    this->declare_parameter("expansion_y_dev", 0.05);
+    this->declare_parameter("expansion_yaw_dev", 0.01);
+    this->declare_parameter("laser_step", 10);
+    this->declare_parameter("sensor_noise_ratio", 0.03);
+    this->declare_parameter("ignore_angle_range_list", std::vector<double>{});
+    this->declare_parameter("flag_init_noise", true);
+    this->declare_parameter("flag_broadcast", true);
+    this->declare_parameter("flag_reverse", false);
+    this->declare_parameter("is_visible", true);
+    this->declare_parameter("ff", 0.17);
+    this->declare_parameter("fr", 0.0005);
+    this->declare_parameter("rf", 0.13);
+    this->declare_parameter("rr", 0.2);
+
+    // パラメータの取得
+    this->get_parameter("hz", hz_);
+    this->get_parameter("particle_num", particle_num_);
+    this->get_parameter("max_particle_num", max_particle_num_);
+    this->get_parameter("min_particle_num", min_particle_num_);
+    this->get_parameter("move_dist_th", move_dist_th_);
+    this->get_parameter("init_x", init_x_);
+    this->get_parameter("init_y", init_y_);
+    this->get_parameter("init_yaw", init_yaw_);
+    this->get_parameter("init_x_dev", init_x_dev_);
+    this->get_parameter("init_y_dev", init_y_dev_);
+    this->get_parameter("init_yaw_dev", init_yaw_dev_);
+    this->get_parameter("alpha_th", alpha_th_);
+    this->get_parameter("reset_count_limit", reset_count_limit_);
+    this->get_parameter("expansion_x_dev", expansion_x_dev_);
+    this->get_parameter("expansion_y_dev", expansion_y_dev_);
+    this->get_parameter("expansion_yaw_dev", expansion_yaw_dev_);
+    this->get_parameter("laser_step", laser_step_);
+    this->get_parameter("sensor_noise_ratio", sensor_noise_ratio_);
+    this->get_parameter("ignore_angle_range_list", ignore_angle_range_list_);
+    this->get_parameter("flag_init_noise", flag_init_noise_);
+    this->get_parameter("flag_broadcast", flag_broadcast_);
+    this->get_parameter("flag_reverse", flag_reverse_);
+    this->get_parameter("is_visible", is_visible_);
+    this->get_parameter("ff", ff_);
+    this->get_parameter("fr", fr_);
+    this->get_parameter("rf", rf_);
+    this->get_parameter("rr", rr_);
+
+    // Subscriberの設定
+    sub_map_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+        "map", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local(),
+        std::bind(&Localizer::map_callback, this, std::placeholders::_1));
+    sub_odom_ = this->create_subscription<nav_msgs::msg::Odometry>(
+        "odom", 10, std::bind(&Localizer::odom_callback, this, std::placeholders::_1));
+    sub_laser_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
+        "scan", 10, std::bind(&Localizer::laser_callback, this, std::placeholders::_1));
+
+    // Publisherの設定
+    pub_estimated_pose_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("estimated_pose", 10);
+    pub_particle_cloud_ = this->create_publisher<geometry_msgs::msg::PoseArray>("particle_cloud", 10);
+
+    // frame idの設定
+    estimated_pose_msg_.header.frame_id = "map";
+    particle_cloud_msg_.header.frame_id = "map";
+
+    // パーティクルクラウドのメモリの確保
+    particles_.reserve(max_particle_num_);
+    particle_cloud_msg_.poses.reserve(max_particle_num_);
+
+    // odometryのモデルの初期化
+    odom_model_ = OdomModel(ff_, fr_, rf_, rr_);
+}
+
+// mapのコールバック関数
+void Localizer::map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg)
+{
+    map_ = *msg;
+    flag_map_ = true;
+}
+
+// odometryのコールバック関数
+void Localizer::odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+{
+    last_odom_ = *msg;
+    
+    // ★追加：初回受信時のみ、prev_odom_に現在の値を代入してジャンプを防ぐ
+    if (is_first_odom_) {
+        prev_odom_ = last_odom_;
+        is_first_odom_ = false;
+    }
+    
+    flag_odom_ = true;
+}
+
+// laserのコールバック関数
+void Localizer::laser_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
+{
+    laser_ = *msg;
+    flag_laser_ = true;
+}
+
+// hz_を返す関数
+int Localizer::getOdomFreq()
+{
+    return hz_;
+}
+
+// ロボットとパーティクルの推定位置の初期化
+void Localizer::initialize()
+{
+    // 推定位置の初期化
+    estimated_pose_.set(init_x_, init_y_, init_yaw_);
+    
+    particles_.clear();
+    double start_yaw = flag_reverse_ ? normalize_angle(init_yaw_ + M_PI) : init_yaw_;
+
+    // ★追加：初期化時にOdomの初回フラグをリセット（再初期化対策）
+    is_first_odom_ = true;
+
+    // 初期位置近傍にパーティクルを配置
+    for(int i=0; i<particle_num_; i++)
+    {
+        // 以下の3行が消えてしまっていたため、復活させました
+        double x = init_x_;
+        double y = init_y_;
+        double yaw = start_yaw;
+
+        if(flag_init_noise_)
+        {
+            x += norm_rv(0.0, init_x_dev_);
+            y += norm_rv(0.0, init_y_dev_);
+            yaw += norm_rv(0.0, init_yaw_dev_);
+        }
+        particles_.emplace_back(x, y, normalize_angle(yaw), 1.0 / particle_num_);
+    }
+
+    // パーティクルの重みの初期化
+    reset_weight();
+}
+
+// main文のループ内で実行される関数
+void Localizer::process()
+{
+    if(flag_map_ && flag_odom_ && flag_laser_)
+    {
+        localize();
+        broadcast_odom_state();
+        publish_estimated_pose();
+        publish_particles();
+    }
+}
+
+// 適切な角度(-M_PI ~ M_PI)を返す
+double Localizer::normalize_angle(double angle)
+{
+    while(angle > M_PI) angle -= 2.0 * M_PI;
+    while(angle < -M_PI) angle += 2.0 * M_PI;
+    return angle;
+}
+
+// ランダム変数生成関数（正規分布）
+double Localizer::norm_rv(const double mean, const double stddev)
+{
+    std::normal_distribution<> dist(mean, stddev);
+    return dist(engine_);
+}
+
+// パーティクルの重みの初期化
+void Localizer::reset_weight()
+{
+    if(particles_.empty()) return;
+    double w = 1.0 / (double)particles_.size();
+    for(auto& p : particles_) p.set_weight(w);
+}
+
+// map座標系からみたodom座標系の位置と姿勢をtfでbroadcast
+void Localizer::broadcast_odom_state()
+{
+    if(flag_broadcast_)
+    {
+        static std::shared_ptr<tf2_ros::TransformBroadcaster> odom_state_broadcaster;
+        if(!odom_state_broadcaster)
+            odom_state_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+
+        // map座標系からみたbase_link座標系の位置と姿勢 (estimated pose)
+        double map_base_x = estimated_pose_.x();
+        double map_base_y = estimated_pose_.y();
+        double map_base_yaw = estimated_pose_.yaw();
+
+        // odom座標系からみたbase_link座標系の位置と姿勢
+        double odom_base_x = last_odom_.pose.pose.position.x;
+        double odom_base_y = last_odom_.pose.pose.position.y;
+        double odom_base_yaw = tf2::getYaw(last_odom_.pose.pose.orientation);
+
+        // map座標系からみたodom座標系の位置と姿勢を計算（回転行列を利用）
+        double map_odom_yaw = normalize_angle(map_base_yaw - odom_base_yaw);
+        double map_odom_x = map_base_x - (odom_base_x * cos(map_odom_yaw) - odom_base_y * sin(map_odom_yaw));
+        double map_odom_y = map_base_y - (odom_base_x * sin(map_odom_yaw) + odom_base_y * cos(map_odom_yaw));
+
+        tf2::Quaternion map_to_odom_quat;
+        map_to_odom_quat.setRPY(0, 0, map_odom_yaw);
+
+        geometry_msgs::msg::TransformStamped odom_state;
+        odom_state.header.stamp = this->now();
+        odom_state.header.frame_id = map_.header.frame_id;
+        odom_state.child_frame_id  = last_odom_.header.frame_id;
+
+        odom_state.transform.translation.x = map_odom_x;
+        odom_state.transform.translation.y = map_odom_y;
+        odom_state.transform.translation.z = 0.0;
+        odom_state.transform.rotation = tf2::toMsg(map_to_odom_quat);
+
+        odom_state_broadcaster->sendTransform(odom_state);
+    }
+}
+
+// 自己位置推定
+void Localizer::localize()
+{
+    motion_update(); // パーティクルを動かす
+    if(flag_move_)
+    {
+        observation_update(); // 引き続きコメントアウト
+    }
+    
+    // ★ここに追加！観測がなくても、動いたパーティクルの中心を推定位置とする
+    estimate_pose(); 
+}
+
+// 動作更新
+void Localizer::motion_update()
+{
+    double dx = last_odom_.pose.pose.position.x - prev_odom_.pose.pose.position.x;
+    double dy = last_odom_.pose.pose.position.y - prev_odom_.pose.pose.position.y;
+    
+    double current_yaw = tf2::getYaw(last_odom_.pose.pose.orientation);
+    double prev_yaw = tf2::getYaw(prev_odom_.pose.pose.orientation);
+    double dyaw = normalize_angle(current_yaw - prev_yaw);
+
+    double length = std::sqrt(dx*dx + dy*dy);
+    
+    // 修正ポイント：移動中の方位を「移動前後の平均の向き」で補正する
+    // これにより、旋回しながら移動するときの座標更新が安定します
+    double avg_yaw = normalize_angle(prev_yaw + dyaw / 2.0);
+    double direction = (length > 0.0) ? (std::atan2(dy, dx) - avg_yaw) : 0.0;
+    
+    double rotation = dyaw;
+
+    odom_model_.set_dev(length, rotation);
+    for(auto& p : particles_)
+    {
+        p.pose_.move(length, direction, rotation, odom_model_.get_fw_noise(), odom_model_.get_rot_noise());
+    }
+
+    prev_odom_ = last_odom_;
+
+    // dist_sum の更新とリセット（前回の提案通り、判定を正確にするため）
+    static double dist_sum = 0.0;
+    static double angle_sum = 0.0; // 追加
+
+    dist_sum += length;
+    angle_sum += std::abs(rotation); // 回転量の絶対値を加算
+
+    if(dist_sum > move_dist_th_ || angle_sum > 0.17)
+    {
+        flag_move_ = true;
+        dist_sum = 0.0; 
+        angle_sum = 0.0; // リセット
+    }
+    else
+    {
+        flag_move_ = false; 
+    }
+}
+
+// 観測更新
+void Localizer::observation_update()
+{
+    // 各パーティクルの尤度計算
+    for(auto& p : particles_)
+    {
+        double l = p.likelihood(map_, laser_, sensor_noise_ratio_, laser_step_, ignore_angle_range_list_);
+        p.set_weight(p.weight() * l);
+    }
+
+    // 重みの正規化
+    normalize_belief();
+
+    // 周辺尤度の算出（リセット判定用）
+    const double alpha = calc_marginal_likelihood();
+
+    // 膨張リセット判定
+    if(alpha < alpha_th_)
+    {
+        expansion_resetting(); // 尤度が低い間は常に膨張させて探し続ける
+    }
+    else
+    {
+        reset_counter = 0;
+    }
+
+    // リサンプリングと推定位置の決定
+    resampling(alpha);
+    estimate_pose();
+}
+
+// 周辺尤度の算出
+double Localizer::calc_marginal_likelihood()
+{
+    double sum = 0.0;
+    for(const auto& p : particles_) sum += p.weight();
+    return sum / (double)particles_.size();
+}
+
+// 推定位置の決定（全パーティクルの加重平均）
+void Localizer::estimate_pose()
+{
+    double mean_x = 0.0, mean_y = 0.0, mean_sin = 0.0, mean_cos = 0.0;
+    for(const auto& p : particles_)
+    {
+        mean_x += p.pose_.x() * p.weight();
+        mean_y += p.pose_.y() * p.weight();
+        mean_sin += std::sin(p.pose_.yaw()) * p.weight();
+        mean_cos += std::cos(p.pose_.yaw()) * p.weight();
+    }
+    estimated_pose_.set(mean_x, mean_y, std::atan2(mean_sin, mean_cos));
+}
+
+// 重みの正規化
+void Localizer::normalize_belief()
+{
+    double sum = 0.0;
+    for(const auto& p : particles_) sum += p.weight();
+    if(sum > 0.0)
+    {
+        for(auto& p : particles_) p.set_weight(p.weight() / sum);
+    }
+    else
+    {
+        reset_weight();
+    }
+}
+
+// 膨張リセット
+void Localizer::expansion_resetting()
+{
+    for(auto& p : particles_)
+    {
+        p.pose_.set(
+            p.pose_.x() + norm_rv(0.0, expansion_x_dev_),
+            p.pose_.y() + norm_rv(0.0, expansion_y_dev_),
+            normalize_angle(p.pose_.yaw() + norm_rv(0.0, expansion_yaw_dev_))
+        );
+    }
+}
+
+// リサンプリング（系統サンプリング）
+void Localizer::resampling(const double alpha)
+{
+    std::vector<double> accum;
+    accum.reserve(particles_.size());
+    double sum = 0.0;
+    for(const auto& p : particles_)
+    {
+        sum += p.weight();
+        accum.push_back(sum);
+    }
+
+    const std::vector<Particle> old(particles_);
+    int old_size = old.size();
+
+    // 尤度alphaが低い場合にパーティクル数を増やす等の動的変更も可能だが、
+    // ここでは初期設定数(particle_num_)を維持する実装とする
+    int next_size = particle_num_;
+    
+    particles_.clear();
+    particles_.reserve(max_particle_num_);
+
+    double step = sum / next_size;
+    std::uniform_real_distribution<> dist(0.0, step);
+    double r = dist(engine_);
+
+    int idx = 0;
+    for(int i=0; i<next_size; i++)
+    {
+        while(r > accum[idx] && idx < old_size - 1) idx++;
+        particles_.push_back(old[idx]);
+        r += step;
+    }
+
+    reset_weight();
+}
+
+// 推定位置のパブリッシュ
+void Localizer::publish_estimated_pose()
+{
+    estimated_pose_msg_.header.stamp = this->now();
+    estimated_pose_msg_.pose.position.x = estimated_pose_.x();
+    estimated_pose_msg_.pose.position.y = estimated_pose_.y();
+    
+    tf2::Quaternion q;
+    q.setRPY(0, 0, estimated_pose_.yaw());
+    estimated_pose_msg_.pose.orientation = tf2::toMsg(q);
+
+    pub_estimated_pose_->publish(estimated_pose_msg_);
+}
+
+// パーティクルクラウドのパブリッシュ
+void Localizer::publish_particles()
+{
+    if(is_visible_)
+    {
+        particle_cloud_msg_.header.stamp = this->now();
+        particle_cloud_msg_.poses.clear();
+        for(const auto& p : particles_)
+        {
+            geometry_msgs::msg::Pose pose;
+            pose.position.x = p.pose_.x();
+            pose.position.y = p.pose_.y();
+            tf2::Quaternion q;
+            q.setRPY(0, 0, p.pose_.yaw());
+            pose.orientation = tf2::toMsg(q);
+            particle_cloud_msg_.poses.push_back(pose);
+        }
+        pub_particle_cloud_->publish(particle_cloud_msg_);
+    }
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/particle.hpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/particle.hpp
+#ifndef PARTICLE_HPP
+#define PARTICLE_HPP
+
+#include <nav_msgs/msg/occupancy_grid.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include "localizer/pose.hpp"
+
+class Particle
+{
+    public:
+        Particle(); // デフォルトコンストラクタ
+        Particle(const double x, const double y, const double yaw, const double weight); // コンストラクタ
+        Particle& operator =(const Particle& p); // 代入演算子
+
+        // accessor
+        void set_weight(const double weight);   // 重みのセット
+        double weight() const { return weight_; }
+
+        // 尤度関数
+        double likelihood(const nav_msgs::msg::OccupancyGrid& map, const sensor_msgs::msg::LaserScan& laser,
+            const double sensor_noise_ratio, const int laser_step, const std::vector<double>& ignore_angle_range_list);
+
+        // --- メンバ変数 ---
+        Pose pose_;
+
+    private:
+        // 柱か判断
+        bool is_ignore_angle(double angle, const std::vector<double>& ignore_angle_range_list);
+
+        // 壁までの距離を算出
+        double calc_dist_to_wall(double x, double y, const double laser_angle, const nav_msgs::msg::OccupancyGrid& map,
+            const double laser_range, const double sensor_noise_ratio);
+
+        // 座標からグリッドのインデックスを返す
+        int  xy_to_grid_index(const double x, const double y, const nav_msgs::msg::MapMetaData& map_info);
+
+        // マップ内か判断
+        bool in_map(const int grid_index, const int map_data_size);
+
+        // 【ここを追記】確率密度関数（正規分布）
+        double norm_pdf(const double x, const double mean, const double stddev);
+
+        // --- メンバ変数 ---
+        double weight_;
+};
+
+#endif
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/pose.hpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/pose.hpp
+#ifndef POSE_HPP
+#define POSE_HPP
+
+#include <cmath>
+
+class Pose
+{
+    public:
+        Pose(); // デフォルトコンストラクタ
+        Pose(const double x, const double y, const double yaw); // コンストラクタ
+        Pose& operator =(const Pose& pose); // 代入演算子
+        Pose& operator /=(const double a);  // 複合代入演算子/=
+
+        // accessor
+        void set(const double x, const double y, const double yaw);
+        double x()   const { return x_; }
+        double y()   const { return y_; }
+        double yaw() const { return yaw_; }
+
+        // パーティクルの移動
+        void move(double length, double direction, double rotation, const double fw_noise, const double rot_noise);
+
+        // 適切な角度(-M_PI ~ M_PI)に変更
+        void normalize_angle();
+
+    private:
+        double x_;   // [m]
+        double y_;   // [m]
+        double yaw_; // [rad]
+};
+
+#endif
+
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/localizer.hpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/localizer.hpp
+#ifndef LOCALIZER_HPP
+#define LOCALIZER_HPP
+
+#include <rclcpp/rclcpp.hpp>
+#include <functional>   // bind, placeholders
+#include <memory>       // SharedPtr
+#include <type_traits>
+#include <utility>
+#include <nav_msgs/msg/occupancy_grid.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+#include <tf2/utils.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
+#include <random>
+
+#include "localizer/odom_model.hpp"
+#include "localizer/particle.hpp"
+#include "localizer/pose.hpp"
+
+class Localizer : public rclcpp::Node
+{
+    public:
+        Localizer();        // デフォルトコンストラクタ
+        int getOdomFreq();  // 制御周期(hz_)を返す関数
+        void initialize();  // パーティクルの初期化
+        void process();     // main文のループ内で実行する関数
+    private:
+        // ----- 関数（引数あり）------
+        // コールバック関数
+        void map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg);
+        void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
+        void laser_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg);
+
+        // その他の関数
+        double normalize_angle(double angle);                    // 適切な角度(-M_PI ~ M_PI)を返す
+        double norm_rv(const double mean, const double stddev);  // ランダム変数生成関数（正規分布）
+        void   resampling(const double alpha);                   // リサンプリング（系統サンプリング）
+
+        // ----- 関数（引数なし）------
+        void   reset_weight();             // パーティクルの重みの初期化
+        void   broadcast_odom_state();     // map座標系からみたodom座標系の位置と姿勢をtfでbroadcast
+        void   localize();                 // 自己位置推定
+        void   motion_update();            // 動作更新
+        void   observation_update();       // 観測更新
+        void   estimate_pose();            // 推定位置の決定
+        void   normalize_belief();         // 重みの正規化
+        void   expansion_resetting();      // 膨張リセット
+        void   publish_estimated_pose();   // 推定位置のパブリッシュ
+        void   publish_particles();        // パーティクルクラウドのパブリッシュ
+        double calc_marginal_likelihood(); // 周辺尤度の算出
+
+        // Subscriber
+        rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_map_;
+        rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr sub_odom_;
+        rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr sub_laser_;
+
+        // Publisher
+        rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_estimated_pose_;
+        rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pub_particle_cloud_;
+
+        // ----- 変数 -----
+        // 基本設定
+        int       hz_;                 // ループ周波数 [Hz]
+        int       particle_num_;       // パーティクルの個数 [-]
+        int       max_particle_num_;   // パーティクルの個数 [-]
+        int       min_particle_num_;   // パーティクルの個数 [-]
+        double    move_dist_th_;       // ロボットの移動開始判断用（スタートからの距離の閾値）[m]    int       reset_counter = 0;   // 連続リセットの回数 [-]
+        // 初期ポーズ関連
+        double    init_x_;             // 初期位置 [m]
+        double    init_y_;             // 初期位置 [m]
+        double    init_yaw_;           // 初期姿勢 [rad]
+        double    init_x_dev_;         // 初期位置xの標準偏差 [m]
+        double    init_y_dev_;         // 初期位置yの標準偏差 [m]
+        double    init_yaw_dev_;       // 初期姿勢の標準偏差 [rad]
+        // リセット関連
+        double    alpha_th_;           // リセットに関する平均尤度の閾値 [-]
+        int       reset_counter = 0;   // 連続リセットの回数 [-]
+        int       reset_count_limit_;  // 連続リセットの回数の上限 [-]
+        double    expansion_x_dev_;    // 膨張リセットの位置xの標準偏差 [m]
+        double    expansion_y_dev_;    // 膨張リセットの位置yの標準偏差 [m]
+        double    expansion_yaw_dev_;  // 膨張リセットの姿勢の標準偏差 [rad]
+        // センサ関連
+        int       laser_step_;         // 何本ずつレーザを見るか [-]
+        double    sensor_noise_ratio_; // 距離に対するセンサノイズ比 [-]
+
+        Pose      estimated_pose_;     // 推定位置
+        OdomModel odom_model_;         // odometryのモデル
+
+        // リスト
+        std::vector<Particle> particles_;             // パーティクルクラウド（計算用）
+        std::vector<double> ignore_angle_range_list_; // 柱に関する角度範囲の配列 [rad]
+
+        // msg受け取りフラグ
+        bool flag_map_     = false;
+        bool flag_odom_    = false;
+        bool flag_laser_   = false;
+
+        // その他のフラグ
+        bool flag_move_ = false;
+        bool flag_init_noise_;
+        bool flag_broadcast_;
+        bool flag_reverse_;
+        bool is_visible_;
+        bool is_first_odom_ = true; // ★追加：Odomの初回受信フラグ
+
+        // OdomModel関連
+        double ff_;     // 直進1[m]で生じる道のりのばらつきの標準偏差 [m]
+        double fr_;     // 回転1[rad]で生じる道のりのばらつきの標準偏差 [m]
+        double rf_;     // 直進1[m]で生じるロボットの向きのばらつきの標準偏差 [rad]
+        double rr_;     // 回転1[rad]で生じるロボットの向きのばらつきの標準偏差 [rad]
+
+        // 正規分布用乱数
+        std::random_device seed_gen_;
+        std::default_random_engine engine_;
+
+        // 各種オブジェクト
+        nav_msgs::msg::OccupancyGrid    map_;                // map_serverから受け取るマップ
+        nav_msgs::msg::Odometry         last_odom_;          // 最新のodometry
+        nav_msgs::msg::Odometry         prev_odom_;          // 1制御周期前のodometry
+        sensor_msgs::msg::LaserScan     laser_;              // レーザ値
+        geometry_msgs::msg::PoseStamped estimated_pose_msg_; // 推定位置
+        geometry_msgs::msg::PoseArray   particle_cloud_msg_; // パーティクルクラウド（パブリッシュ用）
+};
+
+#endif
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/odom_model.hpp
+================================================================================
+
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/odom_model.hpp
+#ifndef ODOM_MODEL_HPP
+#define ODOM_MODEL_HPP
+
+#include <random>
+
+class OdomModel
+{
+    public:
+        OdomModel();    // デフォルトコンストラクタ
+        OdomModel(const double ff, const double fr, const double rf, const double rr);  // コンストラクタ
+        OdomModel& operator =(const OdomModel& model); // 代入演算子
+
+        void   set_dev(const double length, const double angle); // 標準偏差の設定
+        double get_fw_noise();  // 直進に関するノイズの取得
+        double get_rot_noise(); // 回転に関するノイズの取得
+
+    private:
+        double fw_var_per_fw_;   // ffの分散
+        double fw_var_per_rot_;  // frの分散
+        double rot_var_per_fw_;  // rfの分散
+        double rot_var_per_rot_; // rrの分散
+
+        double fw_dev_;  // 直進に関するノイズ
+        double rot_dev_; // 回転に関するノイズ
+
+        // 正規分布
+        std::normal_distribution<> std_norm_dist_;
+        std::random_device seed_gen_;
+        std::default_random_engine engine_;
+};
+
+#endif
+
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/package.xml
+================================================================================
+
+<?xml version="1.0"?>
+<package format="3">
+  <name>team_c_local_path_planner</name>
+  <version>0.0.0</version>
+  <description>The team_c_local_path_planner package</description>
+  <maintainer email="amsl@todo.todo">amsl</maintainer>
+
+  <license>todo</license>
+
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>tf2</depend>
+  <!-- <depend>roomba_500driver_meiji</depend> -->
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/CMakeLists.txt
+================================================================================
+
+cmake_minimum_required(VERSION 3.5)
+project(team_c_local_path_planner)
+
+# find dependencies
+find_package(ament_cmake_auto REQUIRED)
+
+# package.xmlのdependをチェックして自動的にfind_packageしてくれる
+ament_auto_find_build_dependencies()
+
+# 実行ファイルを作成する
+ament_auto_add_executable(${PROJECT_NAME}_node
+  src/local_path_planner.cpp
+  src/local_path_planner_node.cpp)
+# launchファイルをインストール（ament_package_indexが探せる場所に置く）
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
+)
+# ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
+ament_auto_package()
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/launch/team_c_debag.py
+================================================================================
+
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.actions import ExecuteProcess
+from launch_ros.actions import LifecycleNode
+from launch.actions import ExecuteProcess, TimerAction
+import os
+from ament_index_python.packages import get_package_share_directory
+
+
+def generate_launch_description():
+    return LaunchDescription(
+        [
+            Node(
+                package="c_obstacle_detector",
+                executable="c_obstacle_detector_node",
+                parameters=[
+                    "/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/config/obstacle_detector.yaml",
+                    {"use_sim_time": True},
+                ],
+                # parameters=[{"use_sim_time": False}],
+            ),
+            Node(
+                package="team_c_local_map_creator",
+                executable="team_c_local_map_creator_node",
+                parameters=[{"use_sim_time": True}],
+                # parameters=[{"use_sim_time": False}],
+            ),
+            Node(
+                package="c_localizer",
+                executable="c_localizer_node",
+                parameters=[
+                    "/home/amsl/ros2_ws/src/chibi26_c/localizer/config/param/localizer.yaml",
+                    {"use_sim_time": True},
+                ],
+                # parameters=[{"use_sim_time": False}],
+            ),
+            Node(
+                package="team_c_global_path_planner",
+                executable="team_c_global_path_planner_node",
+                parameters=[
+                    "/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml",
+                    {"use_sim_time": True},
+                ],
+                # parameters=["/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml",{"use_sim_time": False},],
+            ),
+            Node(
+                package="team_c_local_goal_creator",
+                executable="team_c_local_goal_creator_node",
+                parameters=[
+                    "/home/amsl/ros2_ws/src/chibi26_c/local_goal_creator/config/param/local_goal_creator.yaml",
+                    {"use_sim_time": True},
+                ],
+                # parameters=[{"use_sim_time": False}],
+            ),
+            Node(
+                package="team_c_local_path_planner",
+                executable="team_c_local_path_planner_node",
+                parameters=[
+                    "/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml",
+                    {"use_sim_time": True},
+                ],
+                # parameters=["/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml",{"use_sim_time": False},],
+            ),
+            Node(
+                package="rviz2",
+                executable="rviz2",
+                arguments=["-d", "./src/chibi26_c/bag/rviz_debag.rviz"],
+                parameters=[{"use_sim_time": True}],
+            ),
+            LifecycleNode(
+                package="nav2_map_server",
+                executable="map_server",
+                name="map_server",
+                namespace="",
+                output="screen",
+                parameters=[
+                    {
+                        "yaml_filename": "/home/user/ws/src/chibi26_c/bag/map/c_map.yaml",
+                        "use_sim_time": True,
+                    }
+                ],
+            ),
+            TimerAction(
+                period=1.0,  # 秒数は状況に応じて調整（map_serverが準備できるくらい待つ）
+                actions=[
+                    Node(
+                        package="tf2_ros",
+                        executable="static_transform_publisher",
+                        parameters=[{"use_sim_time": True}],
+                        arguments=[
+                            "0",
+                            "0",
+                            "0",
+                            "0",
+                            "0",
+                            "0",
+                            "1",
+                            "/base_link",
+                            "/laser",
+                        ],
+                    ),
+                    ExecuteProcess(
+                        cmd=[
+                            "ros2",
+                            "bag",
+                            "play",
+                            "/home/user/ws/src/chibi26_c/bag/rosbag2_2026_03_11-05_14_01",
+                            "--clock",
+                        ],
+                        output="screen",
+                    ),
+                ],
+            ),
+            TimerAction(
+                period=2.0,  # 秒数は状況に応じて調整（map_serverが準備できるくらい待つ）
+                actions=[
+                    Node(
+                        package="nav2_util",
+                        executable="lifecycle_bringup",
+                        name="map_server_lifecycle",
+                        output="screen",
+                        arguments=["map_server"],
+                    )
+                ],
+            ),
+        ]
+    )
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml
+================================================================================
+
+/**:
+  ros__parameters:
+    # パスを可視化するかの設定用
+    is_visible: true
+
+    # 制御周波数 [Hz]
+    hz: 10 ######
+
+    # frame_id
+    robot_frame: "base_link"
+
+    # 速度制限
+    max_vel: 2.0 ######              # [m/s]
+    max_vel1: 3.0 ######            # [m/s]（平常時）
+    max_vel2: 1.0 ######             # [m/s]（減速時）
+    avoid_thres_vel: 0.1 ######     # [m/s]（回避中か判断する閾値）
+    min_vel: 0.0 ######    
+    max_yawrate: 0.0 ######          # [rad/s]
+    max_yawrate1: 1.0 ######         # [rad/s]（平常時）
+    max_yawrate2: 0.5 ######        # [rad/s]（減速時）
+    turn_thres_yawrate: 0.3 ######  # [rad/s]（旋回中か判断する閾値）
+    mode_log_time: 1.0 ######  3.25篠田追加
+
+    # 加速度制限
+    max_accel: 1.0 ######    # [m/s^2]
+    max_dyawrate: 1.0 ###### # [rad/s^2]
+
+    # 速度解像度
+    vel_reso: 0.01 ######    # [m/s]
+    yawrate_reso: 0.01 ###### # [rad/s]
+
+    # 停止状態か判断する閾値
+    stop_vel_th: 0.01 ###### 3.25篠田追加
+    stop_yawrate_th: 0.01 ###### 3.25篠田追加
+
+    # 時間 [s]
+    dt: 0.1 ######
+    predict_time1: 2.0 ######
+    predict_time2: 1.7 ######
+
+    # 機体サイズ(半径) [m]
+    roomba_radius: 0.2 ######
+    radius_margin1: 0.1 ######  #（平常時）
+    radius_margin2: 0.05 ###### #（減速時）
+
+    # 重み定数 [-]
+    weight_heading1: 0.3 ###### #（平常時）
+    weight_heading2: 0.2 ######  #（減速時）
+    weight_dist1: 0.12 ######     #（平常時）
+    weight_dist2: 0.1 ######     #（減速時）
+    weight_vel: 0.1 ######
+
+    # 許容誤差 [m]
+    goal_tolerance: 0.2 ######
+
+    # 評価関数distで探索する範囲 [m]
+    search_range: 1.0 ######
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/src/local_path_planner_node.cpp
+================================================================================
+
+#include "local_path_planner/local_path_planner.hpp"
+
+//===== メイン関数 =====
+int main(int argc, char* argv[])
+{
+    rclcpp::init(argc, argv); // ノードの初期化
+    std::shared_ptr<DWAPlanner> dwa = std::make_shared<DWAPlanner>();
+    rclcpp::Rate loop_rate(dwa->get_freq()); // 制御周波数の設定   
+
+    while(rclcpp::ok())
+    {
+        dwa->process();
+        rclcpp::spin_some(dwa);   // コールバック関数の実行
+        loop_rate.sleep(); // 周期が終わるまで待つ
+    }
+    rclcpp::shutdown();
+
+    return 0;
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/src/local_path_planner.cpp
+================================================================================
+
+/*
+DWA: Dynamic Window Approach
+
+速度について以下のようにする
+velocity(vel) : 並進速度
+yawrate       : 旋回速度
+speed         : 速度の総称(vel, yawrate)
+*/
+
+#include "local_path_planner/local_path_planner.hpp"
+#include <cmath>
+#include <algorithm>
+
+using namespace std::chrono_literals;
+
+// デフォルトコンストラクタ
+// パラメータの宣言と取得
+DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
+{
+    // ###### パラメータの宣言 ######
+    this->declare_parameter("is_visible", true);
+    this->declare_parameter("hz", 10);
+    this->declare_parameter("robot_frame", "base_link");
+    this->declare_parameter("max_vel", 2.0);
+    this->declare_parameter("max_vel1", 3.0);
+    this->declare_parameter("max_vel2", 1.0);
+    this->declare_parameter("avoid_thres_vel", 0.1);
+    this->declare_parameter("min_vel", 0.0);
+    this->declare_parameter("max_yawrate", 0.0);
+    this->declare_parameter("max_yawrate1", 1.0);
+    this->declare_parameter("max_yawrate2", 0.5);
+    this->declare_parameter("turn_thres_yawrate", 0.3);
+    this->declare_parameter("max_accel", 1.0);
+    this->declare_parameter("max_dyawrate", 1.0);
+    this->declare_parameter("vel_reso", 0.01);
+    this->declare_parameter("yawrate_reso", 0.01);
+    this->declare_parameter("dt", 0.1);
+    this->declare_parameter("predict_time1", 3.0);
+    this->declare_parameter("predict_time2", 2.0);
+    this->declare_parameter("roomba_radius", 0.2);
+    this->declare_parameter("radius_margin1", 0.1);
+    this->declare_parameter("radius_margin2", 0.05);
+    this->declare_parameter("weight_heading1", 0.1);
+    this->declare_parameter("weight_dist1", 0.1);
+    this->declare_parameter("weight_vel", 0.1);
+    this->declare_parameter("goal_tolerance", 0.2);
+    this->declare_parameter("search_range", 1.0);
+    //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
+    this->declare_parameter("weight_heading2", 0.1);
+    this->declare_parameter("weight_dist2", 0.1);
+    this->declare_parameter("mode_log_time", 1.0);
+    this->declare_parameter("stop_vel_th", 0.01);
+    this->declare_parameter("stop_yawrate_th", 0.01);
+
+
+    // ###### パラメータの取得 ######
+    is_visible_ = this->get_parameter("is_visible").as_bool();
+    hz_ = this->get_parameter("hz").as_int();
+    robot_frame_ = this->get_parameter("robot_frame").as_string();
+    max_vel_ = this->get_parameter("max_vel").as_double();
+    max_vel1_ = this->get_parameter("max_vel1").as_double();
+    max_vel2_ = this->get_parameter("max_vel2").as_double();
+    min_vel_ = this->get_parameter("min_vel").as_double();
+    max_yawrate_ = this->get_parameter("max_yawrate").as_double();
+    max_yawrate1_ = this->get_parameter("max_yawrate1").as_double();
+    max_yawrate2_ = this->get_parameter("max_yawrate2").as_double();
+    max_accel_ = this->get_parameter("max_accel").as_double();
+    max_dyawrate_ = this->get_parameter("max_dyawrate").as_double();
+    vel_reso_ = this->get_parameter("vel_reso").as_double();
+    yawrate_reso_ = this->get_parameter("yawrate_reso").as_double();
+    dt_ = this->get_parameter("dt").as_double();
+    predict_time1_ = this->get_parameter("predict_time1").as_double();
+    predict_time2_ = this->get_parameter("predict_time2").as_double();
+    roomba_radius_ = this->get_parameter("roomba_radius").as_double();
+    radius_margin1_ = this->get_parameter("radius_margin1").as_double();
+    goal_tolerance_ = this->get_parameter("goal_tolerance").as_double();
+    weight_heading1_ = this->get_parameter("weight_heading1").as_double();
+    weight_dist1_ = this->get_parameter("weight_dist1").as_double();
+    weight_vel_ = this->get_parameter("weight_vel").as_double();
+    //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
+    avoid_thres_vel_    = this->get_parameter("avoid_thres_vel").as_double();
+    turn_thres_yawrate_ = this->get_parameter("turn_thres_yawrate").as_double();
+    radius_margin2_     = this->get_parameter("radius_margin2").as_double();
+    search_range_       = this->get_parameter("search_range").as_double();
+    weight_heading2_ = this->get_parameter("weight_heading2").as_double();
+    weight_dist2_    = this->get_parameter("weight_dist2").as_double();
+    mode_log_time_   = this->get_parameter("mode_log_time").as_double();
+    stop_vel_th_     = this->get_parameter("stop_vel_th").as_double();
+    stop_yawrate_th_ = this->get_parameter("stop_yawrate_th").as_double();
+
+    // ###### tf_buffer_とtf_listenerを初期化 ######
+    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+    // ####### Subscriber #######
+    sub_local_goal_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
+        "local_goal", 10, std::bind(&DWAPlanner::local_goal_callback, this, std::placeholders::_1));
+    sub_obs_poses_ = this->create_subscription<geometry_msgs::msg::PoseArray>(
+        "obs_poses", 10, std::bind(&DWAPlanner::obs_poses_callback, this, std::placeholders::_1));
+
+    // ###### Publisher ######
+    // pub_cmd_vel_ = this->create_publisher<roomba_500driver_meiji::msg::RoombaCtrl>("roomba_control", 10);
+    pub_optimal_path_ = this->create_publisher<nav_msgs::msg::Path>("optimal_path", 10);
+    pub_predict_path_ = this->create_publisher<nav_msgs::msg::Path>("predict_paths", 10);
+    cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+}
+
+// local_goalのコールバック関数
+// local_goalはマップ座標系(map)だが，実際の移動に合わせるためにルンバ座標系(base_link)に変換する処理を行う
+void DWAPlanner::local_goal_callback(const geometry_msgs::msg::PointStamped::SharedPtr msg)
+{
+    printf("local_goal_callback\n");
+    geometry_msgs::msg::TransformStamped transform;
+    try
+    {
+        // tfを取得，成功したらフラグを立てる
+        geometry_msgs::msg::TransformStamped tf = tf_buffer_->lookupTransform(robot_frame_, msg->header.frame_id, tf2::TimePointZero);
+        tf2::doTransform(*msg, local_goal_, tf);
+        flag_local_goal_ = true;
+    }
+    catch(tf2::TransformException& ex)
+    {
+        // 取得に失敗した場合，警告を出力しフラグをリセット
+        RCLCPP_WARN(this->get_logger(), "TF failure: %s", ex.what());
+        flag_local_goal_ = false;
+    }
+    // 取得した変換を用いて，local_goal_ をロボット座標系 (base_link) に変換
+
+
+}
+
+// obs_posesのコールバック関数
+void DWAPlanner::obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
+{
+    obs_poses_ = *msg;
+    flag_obs_poses_ = true;
+}
+
+// hzを返す関数
+int DWAPlanner::get_freq()
+{
+    return hz_;
+}
+
+// 唯一，main文で実行する関数
+// can_move()がTrueのとき，calc_final_input()を実行し，速度と旋回速度を計算
+// それ以外の場合は，速度と旋回速度を0にする
+void DWAPlanner::process()
+{
+    if (can_move()) {
+        std::vector<double> input = calc_final_input();
+        roomba_control(input[0], input[1]);
+    } else {
+        roomba_control(0.0, 0.0);
+    }
+}
+
+// ゴールに着くまでTrueを返す
+bool DWAPlanner::can_move()
+{
+    if (!flag_local_goal_) return false;
+    double dist_to_goal = std::hypot(local_goal_.point.x, local_goal_.point.y);
+    return dist_to_goal > goal_tolerance_;
+}
+
+// Roombaの制御入力を行う
+void DWAPlanner::roomba_control(const double velocity, const double yawrate)
+{
+    geometry_msgs::msg::Twist msg;
+    // msg.mode = 11; // Drive Mode
+    msg.linear.x = velocity;
+    msg.angular.z = yawrate;
+    cmd_vel_pub_->publish(msg);
+}
+
+// 最適な制御入力を計算
+std::vector<double> DWAPlanner::calc_final_input()
+{
+    // 変数を定義，初期化
+    std::vector<double> input{0.0, 0.0};          // {velocity, yawrate}
+    std::vector<std::vector<State>> trajectories; // すべての軌跡格納用
+    double max_score = -1e6;                      // 評価値の最大値格納用
+    int index_of_max_score = 0;                   // 評価値の最大値に対する軌跡のインデックス格納用
+
+    // 旋回状況に応じた減速機能
+    change_mode();
+
+    // ダイナミックウィンドウを計算
+    calc_dynamic_window();
+
+    // ###### 並進速度と旋回速度のすべての組み合わせを評価 ######
+    for (double v = dw_.min_vel; v <= dw_.max_vel; v += vel_reso_) {
+        for (double y = dw_.min_yawrate; y <= dw_.max_yawrate; y += yawrate_reso_) {
+            std::vector<State> traj = calc_traj(v, y);
+            double score = calc_evaluation(traj);
+
+            if (score > max_score) {
+                max_score = score;
+                input = {v, y};
+            }
+            if (is_visible_) trajectories.push_back(traj);
+        }
+    }
+
+    // 現在速度の記録
+    roomba_.velocity = input[0];
+    roomba_.yawrate  = input[1];
+
+    // ###### pathの可視化 #######
+    if (is_visible_ && !trajectories.empty()) {
+        visualize_traj(calc_traj(input[0], input[1]), pub_optimal_path_, this->now());
+    }
+
+    return input;
+}
+
+// 旋回状況に応じた減速機能
+// ロボットの旋回速度や速度によって減速モードに切り替える（普段よりも遅く動く）
+void DWAPlanner::change_mode()
+{
+    // 旋回速度が閾値を超えていたら慎重モード
+    if (std::abs(roomba_.yawrate) > turn_thres_yawrate_) {
+        max_vel_ = max_vel2_;
+        max_yawrate_ = max_yawrate2_;
+        predict_time_ = predict_time2_;
+        radius_margin_ = radius_margin2_;
+    } else {
+        max_vel_ = max_vel1_;
+        max_yawrate_ = max_yawrate1_;
+        predict_time_ = predict_time1_;
+        radius_margin_ = radius_margin1_;
+    }
+
+    weight_heading_ = weight_heading1_; 
+    weight_dist_    = weight_dist1_;
+    // (YAMLでweight2などが設定されていれば、モードに応じて切り替える)
+}
+
+// Dynamic Windowを計算
+void DWAPlanner::calc_dynamic_window()
+{
+    // ###### 車両モデルによるWindow ######
+    double Vs[] = {min_vel_, max_vel_, -max_yawrate_, max_yawrate_};
+
+    // ####### 運動モデルによるWindow #######
+    double Vd[] = 
+    {
+        roomba_.velocity - max_accel_ * dt_,
+        roomba_.velocity + max_accel_ * dt_,
+        roomba_.yawrate - max_dyawrate_ * dt_,
+        roomba_.yawrate + max_dyawrate_ * dt_
+    };
+
+    // ###### 最終的なDynamic Window ######
+    dw_.min_vel = std::max(Vs[0], Vd[0]);
+    dw_.max_vel = std::min(Vs[1], Vd[1]);
+    dw_.min_yawrate = std::max(Vs[2], Vd[2]);
+    dw_.max_yawrate = std::min(Vs[3], Vd[3]);
+}
+
+// 指定された予測時間までロボットの状態を更新し，予測軌跡を生成
+std::vector<State> DWAPlanner::calc_traj(const double velocity, const double yawrate)
+{
+    std::vector<State> traj;
+    State temp_state = {0.0, 0.0, 0.0, velocity, yawrate}; // ロボット座標系なので(0,0,0)スタート
+    for (double t = 0; t < predict_time_; t += dt_) {
+        move(temp_state, velocity, yawrate);
+        traj.push_back(temp_state);
+    }
+    return traj;
+}
+
+// 予測軌跡作成時における仮想ロボットを移動
+void DWAPlanner::move(State& state, const double velocity, const double yawrate)
+{
+    state.yaw += yawrate * dt_;
+    state.yaw = normalize_angle(state.yaw);
+    state.x += velocity * std::cos(state.yaw) * dt_;
+    state.y += velocity * std::sin(state.yaw) * dt_;
+}
+
+// angleを適切な角度(-M_PI ~ M_PI)の範囲にして返す
+double DWAPlanner::normalize_angle(double angle)
+{
+    while (angle > M_PI) angle -= 2.0 * M_PI;
+    while (angle < -M_PI) angle += 2.0 * M_PI;
+    return angle;
+}
+
+// 評価関数を計算
+double DWAPlanner::calc_evaluation(const std::vector<State>& traj)
+{
+    const double heading_score  = weight_heading_ * calc_heading_eval(traj);
+    const double distance_score = weight_dist_    * calc_dist_eval(traj);
+    const double velocity_score = weight_vel_     * calc_vel_eval(traj);
+
+    // 衝突判定（calc_dist_evalがマイナス値を返した場合）
+    if (distance_score < 0) return -1e6;
+
+    const double total_score = heading_score + distance_score + velocity_score;
+
+    return total_score;
+}
+
+// headingの評価関数を計算
+// 軌跡のゴール方向への向きやすさを評価する関数
+double DWAPlanner::calc_heading_eval(const std::vector<State>& traj)
+{
+    double last_x = traj.back().x;
+    double last_y = traj.back().y;
+    double last_yaw = traj.back().yaw;
+
+    double error_angle = std::atan2(local_goal_.point.y - last_y, local_goal_.point.x - last_x);
+    double score = M_PI - std::abs(normalize_angle(error_angle - last_yaw));
+    return score; // ゴールを向いているほど高い
+}
+
+// distの評価関数を計算
+// 軌跡の障害物回避性能を評価する関数
+double DWAPlanner::calc_dist_eval(const std::vector<State>& traj)
+{
+    double min_dist = 1e6;
+    for (const auto& step : traj) {
+        for (const auto& obs : obs_poses_.poses) {
+            double d = std::hypot(step.x - obs.position.x, step.y - obs.position.y);
+            if (d < roomba_radius_ + radius_margin_) return -1e6; 
+            if (d < min_dist) min_dist = d;
+        }
+    }
+    return min_dist;
+}
+
+// velocityの評価関数を計算
+// 軌跡の速度評価を計算する関数
+double DWAPlanner::calc_vel_eval(const std::vector<State>& traj)
+{
+    return traj.back().velocity;
+}
+
+// 軌跡を可視化するための関数
+void DWAPlanner::visualize_traj(const std::vector<State>& traj, rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_local_path, rclcpp::Time now)
+{
+    nav_msgs::msg::Path path;
+    path.header.frame_id = robot_frame_;
+    path.header.stamp = now;
+    for (const auto& s : traj) {
+        geometry_msgs::msg::PoseStamped ps;
+        ps.pose.position.x = s.x;
+        ps.pose.position.y = s.y;
+        path.poses.push_back(ps);
+    }
+    pub_local_path->publish(path);
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/include/local_path_planner/local_path_planner.hpp
+================================================================================
+
+/*
+DWA: Dynamic Window Approach
+
+速度について以下のようにする
+velocity(vel) : 並進速度
+yawrate       : 旋回速度
+speed         : 速度の総称(vel, yawrate)
+*/
+
+#ifndef LOCAL_PATH_PLANNER_A_HPP
+#define LOCAL_PATH_PLANNER_A_HPP
+
+#include <chrono>
+#include <functional>
+#include <memory>
+#include <string>
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2/utils.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+
+// #include "roomba_500driver_meiji/msg/roomba_ctrl.hpp"
+
+// =========================
+// 構造体定義
+// =========================
+
+// ロボットの状態を表す構造体
+struct State
+{
+    double x;        // [m]
+    double y;        // [m]
+    double yaw;      // [rad]
+    double velocity; // [m/s]
+    double yawrate;  // [rad/s]
+};
+
+// 動的ウィンドウを表す構造体
+struct DynamicWindow
+{
+    double min_vel;     // [m/s]
+    double max_vel;     // [m/s]
+    double min_yawrate; // [rad/s]
+    double max_yawrate; // [rad/s]
+};
+
+
+// =========================
+// DWA_Plannerクラス
+// =========================
+class DWAPlanner : public rclcpp::Node
+{
+public:
+    DWAPlanner(); // デフォルトコンストラクタ
+    void process(); // nodeで実行するメイン関数
+    int get_freq(); // hzを返す関数
+
+private:
+    // ----- 引数あり関数 -----
+    // コールバック関数
+    void local_goal_callback(const geometry_msgs::msg::PointStamped::SharedPtr msg);
+    void obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg);
+    //void timer_callback();
+
+    // その他の関数
+    void   roomba_control(const double velocity, const double yawrate);                                         // Roombaの制御入力
+    void   move(State& state, const double velocity, const double yawrate);                                     // 予測軌跡作成時における仮想ロボットの移動
+    void   visualize_traj(const std::vector<State>& traj, rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_local_path, rclcpp::Time now); // 軌跡を可視化
+    double normalize_angle(double angle);                                                                        // 適切な角度(-M_PI ~ M_PI)を返す
+    double calc_evaluation(const std::vector<State>& traj);                                                     // 評価関数を計算
+    double calc_heading_eval(const std::vector<State>& traj);                                                   // headingの評価関数を計算
+    double calc_dist_eval(const std::vector<State>& traj);                                                      // distの評価関数を計算
+    double calc_vel_eval(const std::vector<State>& traj);                                                       // velocityの評価関数を計算
+    std::vector<State> calc_traj(const double velocity, const double yawrate);                                  // 予測軌跡の作成
+
+
+    // ----- 引数なし関数 -----
+    void calc_dynamic_window();             // Dynamic Windowを計算
+    void change_mode();
+    bool can_move();                        // ゴールに着くまでTrueを返す
+    std::vector<double> calc_final_input(); // 最適な制御入力を計算
+
+
+    // ----- 変数 -----
+    bool   is_visible_;         // パスを可視化するかの設定用
+    int    hz_ = 10;                 // ループ周波数
+    int    mode_;
+    double max_vel_;            // 最高並進速度 [m/s]（計算用）
+    double max_vel1_;           // 最高並進速度 [m/s]（平常時）
+    double max_vel2_;           // 最高並進速度 [m/s]（減速時）
+    double turn_thres_yawrate_; // 旋回中か判断する閾値
+    double avoid_thres_vel_;    // 回避中か判断する閾値
+    double mode_log_time_;      // logをとる時間区間
+    double min_vel_;            // 最低並進速度 [m/s]
+    double max_yawrate_;        // 最高旋回速度 [rad/s]（計算用）
+    double max_yawrate1_;       // 最高旋回速度 [rad/s]（平常時）
+    double max_yawrate2_;       // 最高旋回速度 [rad/s]（減速時）
+    double max_accel_;          // 最高並進加速度 [m/s^2]
+    double max_dyawrate_;       // 最高旋回加速度 [rad/s^2]
+    double vel_reso_;           // 並進速度解像度 [m/s]
+    double yawrate_reso_;       // 旋回速度解像度 [rad/s]
+    double stop_vel_th_;        // 停止状態か判断する閾値 [m/s^2]
+    double stop_yawrate_th_;    // 停止状態か判断する閾値 [rad/s]
+    double dt_;                 // 微小時間 [s]
+    double predict_time_;       // 軌跡予測時間 [s]
+    double predict_time1_;      // 軌跡予測時間 [s]
+    double predict_time2_;      // 軌跡予測時間 [s]
+    double roomba_radius_;      // Roombaのサイズ(半径) [m]
+    double radius_margin_;      // 半径の余白 [m]（計算用）
+    double radius_margin1_;     // 半径の余白 [m]（平常時）
+    double radius_margin2_;     // 半径の余白 [m]（減速時）
+    double goal_tolerance_;     // 目標地点の許容誤差 [m]
+    double search_range_;       // 評価関数distで探索する範囲 [m]
+    std::string robot_frame_;   // base_link
+
+    // msgの受け取りフラグ
+    bool flag_local_goal_ = false;
+    bool flag_obs_poses_  = false;
+
+    // mode記録用
+    std::vector<double> mode_log_;
+
+    // 重み定数
+    double weight_heading_;  //（計算用）
+    double weight_heading1_; //（平常時）
+    double weight_heading2_; //（減速時）
+    double weight_dist_;     //（計算用）
+    double weight_dist1_;    //（平常時）
+    double weight_dist2_;    //（減速時）
+    double weight_vel_;
+    
+    // 時間計測
+    rclcpp::Clock clock_; // 時間計測用
+    
+    // ----- その他のオブジェクト -----
+    State roomba_{0.0, 0.0, 0.0, 0.0, 0.0}; //3.25篠田追加
+    DynamicWindow dw_;
+
+    // Subscriber
+    rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr sub_local_goal_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr sub_obs_poses_;
+
+    // Publisher
+    // rclcpp::Publisher<roomba_500driver_meiji::msg::_500Ctrl>::SharedPtr pub_cmd_vel_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_optimal_path_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_predict_path_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;  // 制御入力
+
+    // pose関連
+    geometry_msgs::msg::PointStamped local_goal_; // local path用の目標位置
+    geometry_msgs::msg::PoseArray    obs_poses_;  // 障害物のポーズの配列
+
+    // tf
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
+    // 制御入力
+    // roomba_500driver_meiji::msg::RoombaCtrl cmd_vel_;
+    geometry_msgs::msg::Twist cmd_vel_;
+
+    // // 最大速度
+    // double max_vel_;         // 計算用（追加）
+    // double max_yawrate_;     // 計算用（追加）
+};
+
+#endif
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/package.xml
+================================================================================
+
+<?xml version="1.0"?>
+<package format="3">
+  <name>c_obstacle_detector</name>
+  <version>0.0.0</version>
+  <description>The c_obstacle_detector package</description>
+  <maintainer email="amsl@todo.todo">amsl</maintainer>
+
+  <license>todo</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>ament_cmake</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>tf2</depend>
+  <depend>roomba_500driver_meiji</depend>
+  <depend>sensor_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/CMakeLists.txt
+================================================================================
+
+cmake_minimum_required(VERSION 3.5)
+project(c_obstacle_detector)
+
+# find dependencies
+find_package(ament_cmake_auto REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(rclcpp REQUIRED) 
+find_package(nav_msgs REQUIRED)
+# package.xmlのdependをチェックして自動的にfind_packageしてくれる
+ament_auto_find_build_dependencies()
+# 実行ファイルを作成する
+ament_auto_add_executable(c_obstacle_detector_node
+  src/obstacle_detector.cpp
+  src/obstacle_detector_node.cpp)
+# launchファイルをインストール（ament_package_indexが探せる場所に置く）
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
+)
+# ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
+ament_auto_package()
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/config/obstacle_detector.yaml
+================================================================================
+
+c_obstacle_detector:
+  ros__parameters:
+
+    hz: 10                   # ループ周期 [Hz]
+    laser_step: 1            # 何本ずつレーザを見るか（全1080本）
+    robot_frame: "base_link" # frame_id  基準座標系（どこから見た座標か）
+
+    # --- はずれ値対策 ---
+    ignore_dist: 300        # はずれ値(遠方)とみなす距離 [m]
+    ignore_pillar: 0.40    # はずれ値(近方)とみなす距離 [m]
+
+    #ごめんyaml機能してないかもしれないTT
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/src/obstacle_detector_node.cpp
+================================================================================
+
+#include "obstacle_detector/obstacle_detector.hpp"
+int main(int argc, char *argv[])
+{
+    rclcpp::init(argc, argv);
+    std::shared_ptr<ObstacleDetector> od = std::make_shared<ObstacleDetector>();
+    rclcpp::spin(od);
+    rclcpp::shutdown();
+    return 0;
+}
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/src/obstacle_detector.cpp
+================================================================================
+
+#include "obstacle_detector/obstacle_detector.hpp"
+
+#include <cmath>
+#include <functional>
+#include <limits>
+#include <chrono> // std::chrono::milliseconds を使うために追加
+using std::placeholders::_1;
+
+#include <vector>
+#include <algorithm>
+
+ObstacleDetector::ObstacleDetector()
+: Node("c_obstacle_detector")
+{
+   // global変数を定義(yamlファイルからパラメータを読み込めるようにすると，パラメータ調整が楽)
+    hz_            = this->declare_parameter<int>("hz", 10);
+    laser_step_    = this->declare_parameter<int>("laser_step", 1);
+    robot_frame_   = this->declare_parameter<std::string>("robot_frame", "base_link");
+    ignore_dist_   = this->declare_parameter<double>("ignore_dist", 300);
+    ignore_pillar_ = this->declare_parameter<double>("ignore_pillar", 0.40);
+
+    // Sub: /scan_sub_
+    scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
+        "scan", 10, std::bind(&ObstacleDetector::scan_callback, this, _1));
+    // Pub: /obstacle_pub_
+    obstacles_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("obstacles", 10);
+
+    //timer
+    //using namespace std::chrono_literals -> コード内で 100ms や 1s のように、 ms や s という単位を使うためのもの
+    auto period = std::chrono::milliseconds(1000 / hz_);
+    timer_ = this->create_wall_timer(
+        period,
+        std::bind(&ObstacleDetector::process, this));   //この4行で100msごとにprocess()を呼ぶというテンプレみたいな
+}
+
+//Lidarから障害物の情報を取得
+void ObstacleDetector::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
+{
+    scan_ = *msg;
+}
+
+//一定周期で行う処理(obstacle_detectorの処理)
+void ObstacleDetector::process()
+{
+    //scan_obstacle()を呼び出す
+    if(!scan_obstacle())
+    {
+        return;
+    }
+}
+
+//Lidarから障害物情報を取得し，障害物の座標をpublish　※メッセージの型は自分で決めてください
+bool ObstacleDetector::scan_obstacle()
+{
+    if(!scan_.has_value())  //値が得られなかった場合の処理
+    {
+        return false;
+    }
+    // scan_ 変数の中から、実際のLiDARデータ（LaserScan型）を取り出し、scan_dataという名前で参照できるようにする
+    const auto & scan_data = scan_.value();  //scan_ ・・・ std::optional 型のメンバ変数。[箱]
+                                             //.value　・・・ std::optional 型が持つ専用の機能。[箱の中のデータを取り出す]
+
+    geometry_msgs::msg::PoseArray pose_array;  //PoseArray型の空の変数を作成する（複数の座標をまとめて入れる箱）
+    
+    pose_array.header.stamp = scan_data.header.stamp; //配信データとLiDARからの受信データの時刻をそろえる
+    
+    pose_array.header.frame_id = robot_frame_; //基準座標系を、yamlで設定したrobot_frame_に
+
+    // LiDARの計測データの最初から最後まで、laser_step_飛ばしでループを回す。（ranges配列）
+    for (size_t i = 0; i < scan_data.ranges.size(); i += laser_step_)
+    {
+        double range = scan_data.ranges[i];  // i番目の配列に入っている、LiDARから障害物までの距離mを取得
+        // LiDARの計測開始角度(angle_min)に、1本あたりの角度間隔(angle_increment) × インデックス(i) を足して、現在のレーザーの「角度[rad]」を計算する
+        double angle = scan_data.angle_min + i * scan_data.angle_increment;
+
+        if (is_ignore_scan(range, angle))  // 外れ値かどうか確認する
+        {
+            continue;  // 外れ値だった場合、これ以降の座標計算はスキップして、次のレーザーの処理（次のi）へ進む
+        }
+
+        geometry_msgs::msg::Pose pose;  //// Pose型（位置と向きを持つ型）の変数を作成する。障害物の座標を格納。
+        
+        // x,yを極座標から直交座標
+        pose.position.x = range * std::cos(angle);
+        pose.position.y = range * std::sin(angle);
+        pose.position.z = 0.0;  //z座標0
+        
+        // 回転なし
+        pose.orientation.w = 1.0;  // w　・・・　3D空間での物体の回転（姿勢）
+
+        // 計算が終わった1点分の座標データ(pose)を、配信用配列(pose_array.poses)の最後尾に追加(push_back)する
+        pose_array.poses.push_back(pose);
+    }
+
+    obstacles_pub_->publish(pose_array);  //抽出した全障害物の座標が詰まったpose_array配列をPublish
+
+    return true;
+
+}
+
+
+//無視するlidar情報の範囲の決定(lidarがroombaの櫓の中にあり，櫓の４つの柱を障害物として検出してしまうため削除が必要)
+bool ObstacleDetector::is_ignore_scan(double range, double angle) const
+{
+    // LaserScanはinfが来ることがあるので弾く
+    if (!std::isfinite(range))
+    {
+        return true;
+    }
+
+    // 遠すぎるものを外れ値として除去
+    if (range >= ignore_dist_)
+    {
+        return true;
+    }
+
+    // 角度で除外（4か所）
+    if (
+        (-2.50 <= angle && angle <= -2.20) || // 右後
+        ( 2.20 <= angle && angle <=  2.50) || // 左後
+        ( 0.65 <= angle && angle <=  0.95) || // 左前
+        (-0.95 <= angle && angle <= -0.65)    // 右前
+    )
+    {
+        return true;
+    }
+
+    return false;
+}
+
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/include/obstacle_detector.hpp
+================================================================================
+
+#ifndef obstacle_detector_HPP
+#define obstacle_detector_HPP
+
+#include <rclcpp/rclcpp.hpp>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <sensor_msgs/msg/laser_scan.hpp>
+
+class ObstacleDetector : public rclcpp::Node
+{
+  /*************/
+};
+
+#endif  // b_obstacle_detector_hpp
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/include/obstacle_detector/obstacle_detector.hpp
+================================================================================
+
+#ifndef obstacle_detector_HPP
+#define obstacle_detector_HPP
+
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+
+#include <rclcpp/rclcpp.hpp>
+#include <functional>  // bind & placeholders用
+#include <memory>      // SharedPtr用
+#include <optional>    // has_value()用
+#include <string>
+
+class ObstacleDetector : public rclcpp::Node
+{
+  public:
+    ObstacleDetector();
+  
+  private:
+    void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg);
+    void process();
+    bool scan_obstacle();
+    bool is_ignore_scan(double range, double angle) const;
+
+    int hz_;
+    int laser_step_;
+    std::string robot_frame_;
+    double ignore_dist_;
+    double ignore_pillar_;
+
+    std::optional<sensor_msgs::msg::LaserScan> scan_;  // optional型で定義することによりscanをsubできたかの判定も同時に行う
+    //カギカッコ < > の中には「箱に入れる中身の型」を指定する。
+    //今回はLiDARのデータを入れたいので、sensor_msgs::msg::LaserScan という型を指定。
+    //そして、その「空かもしれない箱」全体に scan_ という名前を付けた
+
+    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;  // scan
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr obstacles_pub_; //障害物位置の送信
+    rclcpp::TimerBase::SharedPtr timer_;  //タイマー宣言
+};
+
+#endif  // c_obstacle_detector_hpp
+
+
+================================================================================
+/home/amsl/ros2_ws/src/chibi26_c/map/b_map_fixed.yaml
+================================================================================
+
+image: b_map_fixed.pgm
+mode: trinary
+resolution: 0.05
+origin: [-30.5,-28.0, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25
+
+
+
