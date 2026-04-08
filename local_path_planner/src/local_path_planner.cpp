@@ -35,18 +35,18 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     this->declare_parameter("vel_reso", 0.01);
     this->declare_parameter("yawrate_reso", 0.01);
     this->declare_parameter("dt", 0.1);
-    this->declare_parameter("predict_time1", 3.0);
-    this->declare_parameter("predict_time2", 2.0);
+    this->declare_parameter("predict_time1", 2.0);
+    this->declare_parameter("predict_time2", 1.7);
     this->declare_parameter("roomba_radius", 0.2);
     this->declare_parameter("radius_margin1", 0.1);
     this->declare_parameter("radius_margin2", 0.05);
     this->declare_parameter("weight_heading1", 0.1);
-    this->declare_parameter("weight_dist1", 0.1);
+    this->declare_parameter("weight_dist1", 0.12);
     this->declare_parameter("weight_vel", 0.1);
     this->declare_parameter("goal_tolerance", 0.2);
     this->declare_parameter("search_range", 1.0);
     //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
-    this->declare_parameter("weight_heading2", 0.1);
+    this->declare_parameter("weight_heading2", 0.2);
     this->declare_parameter("weight_dist2", 0.1);
     this->declare_parameter("mode_log_time", 1.0);
     this->declare_parameter("stop_vel_th", 0.01);
