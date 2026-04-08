@@ -44,7 +44,8 @@ def generate_launch_description():
             package='team_c_local_path_planner',
             executable='team_c_local_path_planner_node',
             # parameters=[{'use_sim_time': True}],
-             parameters=['/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml', {'use_sim_time': False}],
+            parameters=[{'use_sim_time': False}],
+            #  parameters=['/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml', {'use_sim_time': False}],
         ),
         
         # Node(
@@ -80,8 +81,8 @@ def generate_launch_description():
         #     cmd=['ros2', 'bag', 'play', '/home/user/ws/src/chibi26_c/bag/rosbag2_2026_03_11-05_14_01', '--clock'],
         #   output='screen'
         # )
-        #     ]
-        # ),
+            ]
+        ),
     
                 
             

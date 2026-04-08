@@ -35,16 +35,23 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     this->declare_parameter("vel_reso", 0.01);
     this->declare_parameter("yawrate_reso", 0.01);
     this->declare_parameter("dt", 0.1);
-    this->declare_parameter("predict_time1", 3.0);
-    this->declare_parameter("predict_time2", 2.0);
+    this->declare_parameter("predict_time1", 2.0);
+    this->declare_parameter("predict_time2", 1.7);
     this->declare_parameter("roomba_radius", 0.2);
     this->declare_parameter("radius_margin1", 0.1);
-    this->declare_parameter("radius_margin2", 0.05);
+    this->declare_parameter("radius_margin2", 0.1);
     this->declare_parameter("weight_heading1", 0.1);
-    this->declare_parameter("weight_dist1", 0.1);
+    this->declare_parameter("weight_dist1", 0.12);
     this->declare_parameter("weight_vel", 0.1);
     this->declare_parameter("goal_tolerance", 0.2);
     this->declare_parameter("search_range", 1.0);
+    //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
+    this->declare_parameter("weight_heading2", 0.1);
+    this->declare_parameter("weight_dist2", 0.1);
+    this->declare_parameter("mode_log_time", 1.0);
+    this->declare_parameter("stop_vel_th", 0.01);
+    this->declare_parameter("stop_yawrate_th", 0.01);
+
 
     // ###### パラメータの取得 ######
     is_visible_ = this->get_parameter("is_visible").as_bool();
@@ -70,6 +77,16 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     weight_heading1_ = this->get_parameter("weight_heading1").as_double();
     weight_dist1_ = this->get_parameter("weight_dist1").as_double();
     weight_vel_ = this->get_parameter("weight_vel").as_double();
+    //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
+    avoid_thres_vel_    = this->get_parameter("avoid_thres_vel").as_double();
+    turn_thres_yawrate_ = this->get_parameter("turn_thres_yawrate").as_double();
+    radius_margin2_     = this->get_parameter("radius_margin2").as_double();
+    search_range_       = this->get_parameter("search_range").as_double();
+    weight_heading2_ = this->get_parameter("weight_heading2").as_double();
+    weight_dist2_    = this->get_parameter("weight_dist2").as_double();
+    mode_log_time_   = this->get_parameter("mode_log_time").as_double();
+    stop_vel_th_     = this->get_parameter("stop_vel_th").as_double();
+    stop_yawrate_th_ = this->get_parameter("stop_yawrate_th").as_double();
 
     // ###### tf_buffer_とtf_listenerを初期化 ######
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -115,6 +132,8 @@ void DWAPlanner::local_goal_callback(const geometry_msgs::msg::PointStamped::Sha
 // obs_posesのコールバック関数
 void DWAPlanner::obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
 {
+    // 重要：受信した障害物データがロボット座標系(base_link)であることを想定
+    // もし別座標系なら、ここでTransformする必要があります。
     obs_poses_ = *msg;
     flag_obs_poses_ = true;
 }
@@ -206,10 +225,12 @@ void DWAPlanner::change_mode()
         max_vel_ = max_vel2_;
         max_yawrate_ = max_yawrate2_;
         predict_time_ = predict_time2_;
+        radius_margin_ = radius_margin2_;
     } else {
         max_vel_ = max_vel1_;
         max_yawrate_ = max_yawrate1_;
         predict_time_ = predict_time1_;
+        radius_margin_ = radius_margin1_;
     }
 
     weight_heading_ = weight_heading1_; 
@@ -271,14 +292,15 @@ double DWAPlanner::normalize_angle(double angle)
 // 評価関数を計算
 double DWAPlanner::calc_evaluation(const std::vector<State>& traj)
 {
-    const double heading_score  = weight_heading_ * calc_heading_eval(traj);
-    const double distance_score = weight_dist_    * calc_dist_eval(traj);
-    const double velocity_score = weight_vel_     * calc_vel_eval(traj);
+    double dist_val = calc_dist_eval(traj);
+    if (dist_val < 0) return -1e9; // 衝突コースは除外
 
-    // 衝突判定（calc_dist_evalがマイナス値を返した場合）
-    if (distance_score < 0) return -1e6;
+    // 各スコアの計算
+    double heading_score  = weight_heading_ * calc_heading_eval(traj);
+    double distance_score = weight_dist_    * dist_val;
+    double velocity_score = weight_vel_     * calc_vel_eval(traj);
 
-    const double total_score = heading_score + distance_score + velocity_score;
+    double total_score = heading_score + distance_score + velocity_score;
 
     return total_score;
 }
@@ -301,10 +323,17 @@ double DWAPlanner::calc_heading_eval(const std::vector<State>& traj)
 double DWAPlanner::calc_dist_eval(const std::vector<State>& traj)
 {
     double min_dist = 1e6;
+
+    // 障害物データがない場合は、安全のために距離を0にするか、大きな値を返すか運用によります
+    if (obs_poses_.poses.empty()) return 1.0;
+
     for (const auto& step : traj) {
         for (const auto& obs : obs_poses_.poses) {
             double d = std::hypot(step.x - obs.position.x, step.y - obs.position.y);
-            if (d < roomba_radius_) return -1e6; // 衝突
+
+            // 衝突判定：マージンを含めて判定
+            // roomba_radius_ + radius_margin_ よりも近い場合は「即座に不採用」にする
+            if (d < roomba_radius_ + radius_margin_) return -1e6;  // 非常に小さな値を返して、この軌跡を拒絶
             if (d < min_dist) min_dist = d;
         }
     }
