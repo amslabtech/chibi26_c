@@ -16,7 +16,7 @@ ObstacleDetector::ObstacleDetector()
     hz_            = this->declare_parameter<int>("hz", 10);
     laser_step_    = this->declare_parameter<int>("laser_step", 1);
     robot_frame_   = this->declare_parameter<std::string>("robot_frame", "base_link");
-    ignore_dist_   = this->declare_parameter<double>("ignore_dist", 300);
+    ignore_dist_   = this->declare_parameter<double>("ignore_dist", 10);
     ignore_pillar_ = this->declare_parameter<double>("ignore_pillar", 0.40);
 
     // Sub: /scan_sub_
