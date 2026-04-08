@@ -6,23 +6,23 @@ Localizer::Localizer() : Node("c_localizer"), engine_(seed_gen_())
 { 
     // パラメータの宣言
     this->declare_parameter("hz", 10);
-    this->declare_parameter("particle_num", 500);
+    this->declare_parameter("particle_num", 600);
     this->declare_parameter("max_particle_num", 1000);
     this->declare_parameter("min_particle_num", 100);
-    this->declare_parameter("move_dist_th", 0.05);
+    this->declare_parameter("move_dist_th", 0.15);
     this->declare_parameter("init_x", 0.0);
     this->declare_parameter("init_y", 0.0);
     this->declare_parameter("init_yaw", 0.0);
     this->declare_parameter("init_x_dev", 0.5);
     this->declare_parameter("init_y_dev", 0.5);
     this->declare_parameter("init_yaw_dev", 0.2);
-    this->declare_parameter("alpha_th", 0.0017);
+    this->declare_parameter("alpha_th", 0.0035);
     this->declare_parameter("reset_count_limit", 5);
     this->declare_parameter("expansion_x_dev", 0.05);
     this->declare_parameter("expansion_y_dev", 0.05);
     this->declare_parameter("expansion_yaw_dev", 0.01);
     this->declare_parameter("laser_step", 10);
-    this->declare_parameter("sensor_noise_ratio", 0.03);
+    this->declare_parameter("sensor_noise_ratio", 0.06);
     this->declare_parameter("ignore_angle_range_list", std::vector<double>{});
     this->declare_parameter("flag_init_noise", true);
     this->declare_parameter("flag_broadcast", true);
@@ -97,8 +97,14 @@ void Localizer::map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg)
 // odometryのコールバック関数
 void Localizer::odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
 {
-    prev_odom_ = last_odom_;
     last_odom_ = *msg;
+    
+    // ★追加：初回受信時のみ、prev_odom_に現在の値を代入してジャンプを防ぐ
+    if (is_first_odom_) {
+        prev_odom_ = last_odom_;
+        is_first_odom_ = false;
+    }
+    
     flag_odom_ = true;
 }
 
@@ -124,9 +130,13 @@ void Localizer::initialize()
     particles_.clear();
     double start_yaw = flag_reverse_ ? normalize_angle(init_yaw_ + M_PI) : init_yaw_;
 
+    // ★追加：初期化時にOdomの初回フラグをリセット（再初期化対策）
+    is_first_odom_ = true;
+
     // 初期位置近傍にパーティクルを配置
     for(int i=0; i<particle_num_; i++)
     {
+        // 以下の3行が消えてしまっていたため、復活させました
         double x = init_x_;
         double y = init_y_;
         double yaw = start_yaw;
@@ -230,7 +240,7 @@ void Localizer::localize()
     }
     
     // ★ここに追加！観測がなくても、動いたパーティクルの中心を推定位置とする
-    //estimate_pose(); 
+    estimate_pose(); 
 }
 
 // 動作更新
@@ -258,17 +268,29 @@ void Localizer::motion_update()
         p.pose_.move(length, direction, rotation, odom_model_.get_fw_noise(), odom_model_.get_rot_noise());
     }
 
+    prev_odom_ = last_odom_;
+
     // dist_sum の更新とリセット（前回の提案通り、判定を正確にするため）
     static double dist_sum = 0.0;
+    static double angle_sum = 0.0; // 追加
+
     dist_sum += length;
-    if(dist_sum > move_dist_th_)
+    angle_sum += std::abs(rotation); // 回転量の絶対値を加算
+
+    if(dist_sum > move_dist_th_ || angle_sum > 0.17)
     {
         flag_move_ = true;
         dist_sum = 0.0; 
+        angle_sum = 0.0; // リセット
     }
     else
     {
         flag_move_ = false; 
+    }
+
+    // motion_update() 内
+    if (length > 0.0 || std::abs(rotation) > 0.0) {
+        RCLCPP_INFO(this->get_logger(), "Odom move: len=%.3f, rot=%.3f, total_dist=%.3f", length, rotation, dist_sum);
     }
 }
 
@@ -291,11 +313,7 @@ void Localizer::observation_update()
     // 膨張リセット判定
     if(alpha < alpha_th_)
     {
-        reset_counter++;
-        if(reset_counter < reset_count_limit_)
-        {
-            expansion_resetting();
-        }
+        expansion_resetting(); // 尤度が低い間は常に膨張させて探し続ける
     }
     else
     {
