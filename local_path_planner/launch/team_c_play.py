@@ -13,46 +13,46 @@ def generate_launch_description():
         Node(
             package='c_obstacle_detector',
             executable='c_obstacle_detector_node',
-            parameters=[{'use_sim_time': True}],
-            # parameters=[{'use_sim_time': False}],
+            # parameters=[{'use_sim_time': True}],
+             parameters=[{'use_sim_time': False}],
         ),
         Node(
             package='team_c_local_map_creator',
             executable='team_c_local_map_creator_node',
-            parameters=[{'use_sim_time': True}],
-            # parameters=[{'use_sim_time': False}],
+            # parameters=[{'use_sim_time': True}],
+            parameters=[{'use_sim_time': False}],
         ),
         Node(
             package='team_c_localizer',
             executable='team_c_localizer_node',
-            parameters=[{'use_sim_time': True}],
-            # parameters=[{'use_sim_time': False}],
+            # parameters=[{'use_sim_time': True}],
+             parameters=[{'use_sim_time': False}],
         ),
         Node(
             package='team_c_global_path_planner',
             executable='team_c_global_path_planner_node',
-            parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': True}],
-            # parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': False}],
+            # parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': True}],
+             parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': False}],
         ),
         Node(
             package='team_c_local_goal_creator',
             executable='team_c_local_goal_creator_node',
-            parameters=[{'use_sim_time': True}],
-            # parameters=[{'use_sim_time': False}],
+            # parameters=[{'use_sim_time': True}],
+             parameters=[{'use_sim_time': False}],
         ),
         Node(
             package='team_c_local_path_planner',
             executable='team_c_local_path_planner_node',
             # parameters=[{'use_sim_time': True}],
-            parameters=['/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml', {'use_sim_time': True}],
+             parameters=['/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml', {'use_sim_time': False}],
         ),
         
-        Node(
-          package='rviz2',
-          executable='rviz2',
-          arguments=['-d','./src/chibi26_c/bag/rviz_debag.rviz'],
-          parameters=[{'use_sim_time': True}],
-        ),
+        # Node(
+        #   package='rviz2',
+        #   executable='rviz2',
+        #   arguments=['-d','./src/chibi26_c/bag/rviz_debag.rviz'],
+        #   parameters=[{'use_sim_time': True}],
+        # ),
         
 
         LifecycleNode(
@@ -71,17 +71,18 @@ def generate_launch_description():
             period=1.0,  # 秒数は状況に応じて調整（map_serverが準備できるくらい待つ）
             actions=[
                 Node(
-                    package='tf2_ros',
-                    executable='static_transform_publisher',
-                    parameters=[{'use_sim_time': True}],
-                    arguments=['0', '0', '0', '0', '0', '0', '1','/base_link', '/laser'],
-                ),
-            # ExecuteProcess(
-            #     cmd=['ros2', 'bag', 'play', '/home/user/ws/src/chibi26_c/bag/rosbag2_2026_03_11-05_14_01', '--clock'],
-            #   output='screen'
-            # )
-            ]
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            parameters=[{'use_sim_time': True}],
+            arguments=['0', '0', '0', '0', '0', '0', '1','/base_link', '/laser'],
         ),
+        # ExecuteProcess(
+        #     cmd=['ros2', 'bag', 'play', '/home/user/ws/src/chibi26_c/bag/rosbag2_2026_03_11-05_14_01', '--clock'],
+        #   output='screen'
+        # )
+            ]
+         ),
+    
                 
             
         TimerAction(
@@ -96,5 +97,9 @@ def generate_launch_description():
                 )
             ]
         )
-     
-    ])
+
+        
+
+        
+        
+        ])
