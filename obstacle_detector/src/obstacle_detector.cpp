@@ -95,7 +95,7 @@ bool ObstacleDetector::scan_obstacle()
     obstacles_pub_->publish(pose_array);  //抽出した全障害物の座標が詰まったpose_array配列をPublish
 
     return true;
-
+    
 }
 
 
