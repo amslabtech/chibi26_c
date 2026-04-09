@@ -102,28 +102,30 @@ bool ObstacleDetector::scan_obstacle()
 //無視するlidar情報の範囲の決定(lidarがroombaの櫓の中にあり，櫓の４つの柱を障害物として検出してしまうため削除が必要)
 bool ObstacleDetector::is_ignore_scan(double range, double angle) const
 {
-    // LaserScanはinfが来ることがあるので弾く
-    if (!std::isfinite(range))
+    // 1. 無効な値は無視
+    if (!std::isfinite(range)) return true;
+
+    // 2. 【柱の判定】
+    // 「距離が近い」かつ「特定の角度」に当てはまるものだけをピンポイントで無視(true)する
+    if (range < 0.0) // 柱があるはずの距離（櫓の半径より少し大きく）
     {
-        return true;
+        if (
+            (-2.50 <= angle && angle <= -2.20) || // 右後
+            ( 2.20 <= angle && angle <=  2.50) || // 左後
+            ( 0.65 <= angle && angle <=  0.95) || // 左前
+            (-0.95 <= angle && angle <= -0.65)    // 右前
+        )
+        {
+            return true; // これが「柱」なので除去！
+        }
+        
+        // 柱以外の近距離（自分自身の機体など）も邪魔なら除去
+        // return true; 
     }
 
-    // 遠すぎるものを外れ値として除去
-    if (range >= ignore_dist_)
-    {
-        return true;
-    }
-
-    // 角度で除外（4か所）
-    if (
-        (-2.50 <= angle && angle <= -2.20) || // 右後
-        ( 2.20 <= angle && angle <=  2.50) || // 左後
-        ( 0.65 <= angle && angle <=  0.95) || // 左前
-        (-0.95 <= angle && angle <= -0.65)    // 右前
-    )
-    {
-        return true;
-    }
-
-    return false;
+    // 3. 【それ以外すべて】
+    // 柱以外の距離や角度のデータは、すべて「有効な障害物」として扱う
+    return false; 
 }
+
+

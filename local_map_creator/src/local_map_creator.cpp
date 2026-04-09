@@ -82,18 +82,15 @@ void LocalMapCreator::process()
 // 障害物の情報をもとにローカルマップを更新する
 void LocalMapCreator::update_map()
 {
-    // 障害物の位置を考慮してマップを更新する
     for (const auto& pose : obs_poses_.poses)
     {        
-        // ObstacleDetectorで変換済みのx, y
         double x = pose.position.x;
         double y = pose.position.y;
-        
-        // --- 原点(0,0)から障害物までを走行可能領域(0)として塗る ---
-        double dx = x;
-        double dy = y;
-        double dist = std::sqrt(dx * dx + dy * dy);
+        double dist = std::sqrt(x * x + y * y);
+        // atan2を使ってx,yから角度(ラジアン)を算出
+        double angle = std::atan2(y, x); 
 
+        // --- 1. 原点から障害物までを白く(0)塗るロジック (変更なし) ---
         if (dist > 1e-6)
         {
             double step = map_reso_ * 0.5;
@@ -102,10 +99,7 @@ void LocalMapCreator::update_map()
             for (int i = 0; i < n; ++i)
             {
                 double t = static_cast<double>(i) / static_cast<double>(n);
-                double px = t * dx;
-                double py = t * dy;
-
-                int free_index = xy_to_grid_index(px, py);
+                int free_index = xy_to_grid_index(t * x, t * y);
 
                 if (free_index != -1)
                 {
@@ -114,25 +108,33 @@ void LocalMapCreator::update_map()
             }
         }
     
-        // 座標からインデックスへ変換 (ここでマップ外の判定も同時に行われる)
-        int index = xy_to_grid_index(x, y);
+        // --- 2. 柱判定の追加 (ここだけが追加・変更点) ---
+        // 柱の距離(例: 0.45m以内)かつ、指定した角度の範囲内か判定
+        if (dist < 0.3) 
+        {
+            if ((-2.50 <= angle && angle <= -2.20) || 
+                ( 2.20 <= angle && angle <=  2.50) || 
+                ( 0.65 <= angle && angle <=  3.14) || 
+                (-0.95 <= angle && angle <= -0.65))
+            {
+                // ここが実行される＝柱である
+                int pillar_index = xy_to_grid_index(x, y);
+                if (pillar_index != -1)
+                {
+                    local_map_.data[pillar_index] = 0; // 黒(100)ではなく白(0)で上書き
+                }
+                // このデータの処理はここで終了(下の「黒塗り」へ行かない)
+                continue; 
+            }
+        }
 
-        //RCLCPP_INFO(this->get_logger(), //確認
-          //  "x=%f y=%f index=%d", x, y, index);
-        
-        // インデックスが -1(マップ外) でなければ、障害物をプロット
+        // --- 3. 障害物の点を黒(100)で塗る (変更なし) ---
+        int index = xy_to_grid_index(x, y);
         if (index != -1)
         {
             local_map_.data[index] = 100; 
-            //RCLCPP_INFO(this->get_logger(), "plot 100 at index=%d", index);　確認
         }
-        /*else
-        {
-            local_map_.data[index] = 0;
-        }*/
-
     }
-    // 更新したマップをpublishする
 }
 
 // マップの初期化(すべて「既知(走行可能)」にする)
