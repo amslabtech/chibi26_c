@@ -24,5 +24,6 @@ int main(int argc, char* argv[])
         loop_rate.sleep(); // 周期が終わるまで待つ
     }
 
+    rclcpp::shutdown();
     return 0;
 }

@@ -6,10 +6,10 @@ Localizer::Localizer() : Node("c_localizer"), engine_(seed_gen_())
 { 
     // パラメータの宣言
     this->declare_parameter("hz", 10);
-    this->declare_parameter("particle_num", 600);
+    this->declare_parameter("particle_num", 550);
     this->declare_parameter("max_particle_num", 1000);
     this->declare_parameter("min_particle_num", 100);
-    this->declare_parameter("move_dist_th", 0.15);
+    this->declare_parameter("move_dist_th", 0.185);
     this->declare_parameter("init_x", 0.0);
     this->declare_parameter("init_y", 0.0);
     this->declare_parameter("init_yaw", 0.0);
@@ -85,6 +85,7 @@ Localizer::Localizer() : Node("c_localizer"), engine_(seed_gen_())
 
     // odometryのモデルの初期化
     odom_model_ = OdomModel(ff_, fr_, rf_, rr_);
+    initialize();
 }
 
 // mapのコールバック関数

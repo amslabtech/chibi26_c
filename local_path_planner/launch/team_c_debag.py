@@ -17,13 +17,13 @@ def generate_launch_description():
                     "/home/amsl/ros2_ws/src/chibi26_c/obstacle_detector/config/obstacle_detector.yaml",
                     {"use_sim_time": True},
                 ],
-                # parameters=[{"use_sim_time": False}],
+                #  parameters=[{'use_sim_time': False}],
             ),
             Node(
                 package="team_c_local_map_creator",
                 executable="team_c_local_map_creator_node",
                 parameters=[{"use_sim_time": True}],
-                # parameters=[{"use_sim_time": False}],
+                #  parameters=[{'use_sim_time': False}],
             ),
             Node(
                 package="c_localizer",
@@ -32,16 +32,16 @@ def generate_launch_description():
                     "/home/amsl/ros2_ws/src/chibi26_c/localizer/config/param/localizer.yaml",
                     {"use_sim_time": True},
                 ],
-                # parameters=[{"use_sim_time": False}],
+                #  parameters=[{'use_sim_time': False}],
             ),
             Node(
                 package="team_c_global_path_planner",
                 executable="team_c_global_path_planner_node",
                 parameters=[
-                    "/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml",
+                    "/home/amsl/ros2_ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml",
                     {"use_sim_time": True},
                 ],
-                # parameters=["/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml",{"use_sim_time": False},],
+                #  parameters=['/home/user/ws/src/chibi26_c/global_path_planner/config/param/global_path_planner.yaml', {'use_sim_time': False}],
             ),
             Node(
                 package="team_c_local_goal_creator",
@@ -50,7 +50,7 @@ def generate_launch_description():
                     "/home/amsl/ros2_ws/src/chibi26_c/local_goal_creator/config/param/local_goal_creator.yaml",
                     {"use_sim_time": True},
                 ],
-                # parameters=[{"use_sim_time": False}],
+                #  parameters=[{'use_sim_time': False}],
             ),
             Node(
                 package="team_c_local_path_planner",
@@ -59,12 +59,12 @@ def generate_launch_description():
                     "/home/amsl/ros2_ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml",
                     {"use_sim_time": True},
                 ],
-                # parameters=["/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml",{"use_sim_time": False},],
+                #  parameters=['/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml', {'use_sim_time': False}],
             ),
             Node(
                 package="rviz2",
                 executable="rviz2",
-                arguments=["-d", "./src/chibi26_c/bag/rviz_debag.rviz"],
+                arguments=["-d", "./src/bag/team_c/rviz2_debag.rviz"],
                 parameters=[{"use_sim_time": True}],
             ),
             LifecycleNode(
@@ -75,13 +75,13 @@ def generate_launch_description():
                 output="screen",
                 parameters=[
                     {
-                        "yaml_filename": "/home/user/ws/src/chibi26_c/bag/map/c_map.yaml",
+                        "yaml_filename": "/home/amsl/ros2_ws/src/bag/team_c/map/c_map.yaml",
                         "use_sim_time": True,
                     }
                 ],
             ),
             TimerAction(
-                period=1.0,  # 秒数は状況に応じて調整（map_serverが準備できるくらい待つ）
+                period=3.0,  # 秒数は状況に応じて調整（map_serverが準備できるくらい待つ）
                 actions=[
                     Node(
                         package="tf2_ros",
@@ -104,7 +104,7 @@ def generate_launch_description():
                             "ros2",
                             "bag",
                             "play",
-                            "/home/user/ws/src/chibi26_c/bag/rosbag2_2026_03_11-05_14_01",
+                            "/home/amsl/ros2_ws/src/bag/team_c/rosbag2_2026_03_11-05_14_01",
                             "--clock",
                         ],
                         output="screen",
