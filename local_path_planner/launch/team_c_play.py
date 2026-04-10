@@ -63,7 +63,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'yaml_filename': '/home/user/ws/src/chibi26_c/bag/map/c_map.yaml',
-                'use_sim_time': True
+                'use_sim_time': False
             }]
         ),
 
@@ -73,7 +73,7 @@ def generate_launch_description():
                 Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            parameters=[{'use_sim_time': True}],
+            parameters=[{'use_sim_time': False}],
             arguments=['0', '0', '0', '0', '0', '0', '1','/base_link', '/laser'],
         ),
         # ExecuteProcess(
@@ -91,7 +91,6 @@ def generate_launch_description():
                 Node(
                     package='nav2_util',
                     executable='lifecycle_bringup',
-                    name='map_server_lifecycle',
                     output='screen',
                     arguments=['map_server']
                 )

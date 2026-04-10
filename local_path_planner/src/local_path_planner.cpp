@@ -382,8 +382,7 @@ double DWAPlanner::calc_dist_eval(const std::vector<State>& traj)
             }
         }
     }
-
-    return min_dist;
+    return std::min(min_dist, search_range_);
 }
 
 // velocityの評価関数を計算
