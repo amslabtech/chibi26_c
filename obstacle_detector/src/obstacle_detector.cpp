@@ -121,14 +121,19 @@ bool ObstacleDetector::is_ignore_scan(double range, double angle) const
     //     ( 0.65 <= angle && angle <=  0.95) || // 左前
     //     (-0.95 <= angle && angle <= -0.65)    // 右前
     // )
-    const double delta = 0.0436; // 約2.5度（1.5° + 1°）
+    const double delta = 0.0436;      // ±2.5度
+    const double delta_inner = 0.01745; // 内側だけ+1度
 
     if (
         (-2.50 - delta <= angle && angle <= -2.20 + delta) || // 右後
         ( 2.20 - delta <= angle && angle <=  2.50 + delta) || // 左後
-        ( 0.65 - delta <= angle && angle <=  0.95 + delta) || // 左前
-        (-0.95 - delta <= angle && angle <= -0.65 + delta)    // 右前
-    )
+
+        // 左前（内側＝0方向に向かう側 → 下限をさらに広げる）
+        ( (0.65 - delta - delta_inner) <= angle && angle <= (0.95 + delta) ) ||
+
+        // 右前（内側＝0方向に向かう側 → 上限をさらに広げる）
+        ( (-0.95 - delta) <= angle && angle <= (-0.65 + delta + delta_inner) )
+        )
     {
         return true;
     }
