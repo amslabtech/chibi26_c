@@ -12,18 +12,18 @@
     # 速度制限
     max_vel: 2.0 ######              # [m/s]
     max_vel1: 3.0 ######            # [m/s]（平常時）
-    max_vel2: 1.0 ######             # [m/s]（減速時）
+    max_vel2: 2.0 ######             # [m/s]（減速時）
     avoid_thres_vel: 0.1 ######     # [m/s]（回避中か判断する閾値）
     min_vel: 0.0 ######    
     max_yawrate: 0.0 ######          # [rad/s]
     max_yawrate1: 1.0 ######         # [rad/s]（平常時）
-    max_yawrate2: 0.5 ######        # [rad/s]（減速時）        
+    max_yawrate2: 0.8 ######        # [rad/s]（減速時）        
     turn_thres_yawrate: 0.3 ######  # [rad/s]（旋回中か判断する閾値）
     mode_log_time: 1.0 ######  3.25篠田追加
 
     # 加速度制限
-    max_accel: 1.0 ######    # [m/s^2]
-    max_dyawrate: 1.0 ###### # [rad/s^2] 
+    max_accel: 2.0 ######    # [m/s^2]
+    max_dyawrate: 2.0 ###### # [rad/s^2] 
 
     # 速度解像度
     vel_reso: 0.01 ######    # [m/s]
@@ -35,12 +35,12 @@
 
     # 時間 [s]
     dt: 0.1 ######
-    predict_time1: 2.0 ######
-    predict_time2: 1.7 ######
+    predict_time1: 1.5 ######
+    predict_time2: 1.0 ######
 
     # 機体サイズ(半径) [m]
-    roomba_radius: 0.2 ######
-    radius_margin1: 0.1 ######  #（平常時） 
+    roomba_radius: 0.15 ######
+    radius_margin1: 0.10 ######  #（平常時） 
     radius_margin2: 0.05 ###### #（減速時）
 
     # 重み定数 [-]
@@ -54,4 +54,4 @@
     goal_tolerance: 0.2 ######
 
     # 評価関数distで探索する範囲 [m]
-    search_range: 0.5 ######     //1.0 4.08篠田更新
+    search_range: 1.2 ######     //1.0 4.08篠田更新
