@@ -9,4 +9,4 @@ c_obstacle_detector:
     ignore_dist: 300        # はずれ値(遠方)とみなす距離 [m]
     ignore_pillar: 0.40    # はずれ値(近方)とみなす距離 [m]
 
-    #ごめんyaml機能してないかもしれないTT
+    #ごめんyaml機能してないかもしれないTT　変更する際は念のためcppも更新してください

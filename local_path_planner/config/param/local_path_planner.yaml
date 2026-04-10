@@ -35,8 +35,8 @@
 
     # 時間 [s]
     dt: 0.1 ######
-    predict_time1: 3.0 ######
-    predict_time2: 2.0 ######
+    predict_time1: 2.0 ######
+    predict_time2: 1.7 ######
 
     # 機体サイズ(半径) [m]
     roomba_radius: 0.2 ######
@@ -44,9 +44,9 @@
     radius_margin2: 0.05 ###### #（減速時）
 
     # 重み定数 [-]
-    weight_heading1: 0.1 ###### #（平常時）
-    weight_heading2: 0.1 ######  #（減速時）
-    weight_dist1: 0.1 ######     #（平常時）
+    weight_heading1: 0.3 ###### #（平常時）
+    weight_heading2: 0.2 ######  #（減速時）
+    weight_dist1: 0.12 ######     #（平常時）
     weight_dist2: 0.1 ######     #（減速時）
     weight_vel: 0.1 ######
 
