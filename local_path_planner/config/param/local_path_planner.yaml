@@ -46,7 +46,7 @@
     # 重み定数 [-]
     weight_heading1: 0.1 ###### #（平常時）
     weight_heading2: 0.2 ######  #（減速時）
-    weight_dist1: 0.4 ######     #（平常時）
+    weight_dist1: 0.45 ######     #（平常時）
     weight_dist2: 0.1 ######     #（減速時）
     weight_vel: 0.01 ######
 
@@ -54,4 +54,4 @@
     goal_tolerance: 0.2 ######
 
     # 評価関数distで探索する範囲 [m]
-    search_range: 1.2 ######     //1.0 4.08篠田更新
+    search_range: 1.2 ######

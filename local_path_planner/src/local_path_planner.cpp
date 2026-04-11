@@ -141,7 +141,7 @@ void DWAPlanner::obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedP
 {
     obs_poses_ = *msg;
     flag_obs_poses_ = true;
-    RCLCPP_INFO(this->get_logger(), "Received obstacles: %zu", msg->poses.size()); //表示するコード(正味不要)
+    RCLCPP_WARN(this->get_logger(), "Received obstacles: %zu", msg->poses.size()); //表示するコード(正味不要)
 }
 
 // hzを返す関数
@@ -185,7 +185,7 @@ bool DWAPlanner::can_move()
     }
 
     double dist_to_goal = std::hypot(local_goal_.point.x, local_goal_.point.y);
-    RCLCPP_INFO(this->get_logger(), "dist_to_goal = %.3f", dist_to_goal);
+    RCLCPP_WARN(this->get_logger(), "dist_to_goal = %.3f", dist_to_goal);
 
     return dist_to_goal > goal_tolerance_;
 }
