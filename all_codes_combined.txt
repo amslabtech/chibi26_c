@@ -164,10 +164,8 @@ void LocalMapCreator::update_map()
         double x = pose.position.x;
         double y = pose.position.y;
         double dist = std::sqrt(x * x + y * y);
-        // atan2を使ってx,yから角度(ラジアン)を算出
-        double angle = std::atan2(y, x); 
-
-        // --- 1. 原点から障害物までを白く(0)塗るロジック (変更なし) ---
+        
+        // --- 1. 原点から障害物までを白く(0)塗るロジック ---
         if (dist > 1e-6)
         {
             double step = map_reso_ * 0.5;
@@ -184,32 +182,12 @@ void LocalMapCreator::update_map()
                 }
             }
         }
-    
-        // --- 2. 柱判定の追加 (ここだけが追加・変更点) ---
-        // 柱の距離(例: 0.45m以内)かつ、指定した角度の範囲内か判定
-        if (dist < 0.3) 
-        {
-            if ((-2.50 <= angle && angle <= -2.20) || 
-                ( 2.20 <= angle && angle <=  2.50) || 
-                ( 0.65 <= angle && angle <=  3.14) || 
-                (-0.95 <= angle && angle <= -0.65))
-            {
-                // ここが実行される＝柱である
-                int pillar_index = xy_to_grid_index(x, y);
-                if (pillar_index != -1)
-                {
-                    local_map_.data[pillar_index] = 0; // 黒(100)ではなく白(0)で上書き
-                }
-                // このデータの処理はここで終了(下の「黒塗り」へ行かない)
-                continue; 
-            }
-        }
 
-        // --- 3. 障害物の点を黒(100)で塗る (変更なし) ---
+        // --- 3. 障害物の点を黒(100)で塗る ---
         int index = xy_to_grid_index(x, y);
         if (index != -1)
         {
-            local_map_.data[index] = 100; 
+            local_map_.data[index] = 100;
         }
     }
 }
@@ -3421,7 +3399,7 @@ c_obstacle_detector:
 
     # --- はずれ値対策 ---
     ignore_dist: 300        # はずれ値(遠方)とみなす距離 [m]
-    ignore_pillar: 0.40    # はずれ値(近方)とみなす距離 [m]
+    ignore_pillar: 0.30    # はずれ値(近方)とみなす距離 [m]
 
     #ごめんyaml機能してないかもしれないTT
 
@@ -3554,7 +3532,7 @@ bool ObstacleDetector::is_ignore_scan(double range, double angle) const
 
     // 2. 【柱の判定】
     // 「距離が近い」かつ「特定の角度」に当てはまるものだけをピンポイントで無視(true)する
-    if (range < 0.0) // 柱があるはずの距離（櫓の半径より少し大きく）
+    if (range < ignore_pillar_) // パラメータで取得した閾値(0.40m)を使う
     {
         if (
             (-2.50 <= angle && angle <= -2.20) || // 右後

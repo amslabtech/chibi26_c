@@ -317,12 +317,26 @@ double DWAPlanner::calc_heading_eval(const std::vector<State>& traj)
 
 // distの評価関数を計算
 // 軌跡の障害物回避性能を評価する関数
+// 修正後の calc_dist_eval のイメージ
 double DWAPlanner::calc_dist_eval(const std::vector<State>& traj)
 {
     double min_dist = 1e6;
-    for (const auto& step : traj) {
-        for (const auto& obs : obs_poses_.poses) {
+    // 正面とみなす角度範囲（例：左右45度ずつなら M_PI / 4.0）
+    const double search_angle_range = M_PI / 4.0; 
+
+    for (const auto& obs : obs_poses_.poses) {
+        // ロボットから見た障害物の角度を計算
+        double angle_to_obs = std::atan2(obs.position.y, obs.position.x);
+
+        // 指定した角度（正面）以外にある障害物は評価から除外する
+        if (std::abs(angle_to_obs) > search_angle_range) {
+            continue;
+        }
+
+        for (const auto& step : traj) {
             double d = std::hypot(step.x - obs.position.x, step.y - obs.position.y);
+            
+            // 衝突判定：ここでのマージンを小さくすると、より狭い場所を通れるようになります
             if (d < roomba_radius_ + radius_margin_) return -1e6; 
             if (d < min_dist) min_dist = d;
         }
