@@ -16,7 +16,7 @@ ObstacleDetector::ObstacleDetector()
     hz_            = this->declare_parameter<int>("hz", 10);
     laser_step_    = this->declare_parameter<int>("laser_step", 1);
     robot_frame_   = this->declare_parameter<std::string>("robot_frame", "base_link");
-    ignore_dist_   = this->declare_parameter<double>("ignore_dist", 10);
+    ignore_dist_   = this->declare_parameter<double>("ignore_dist", 300);
     ignore_pillar_ = this->declare_parameter<double>("ignore_pillar", 0.40);
 
     // Sub: /scan_sub_
@@ -121,19 +121,15 @@ bool ObstacleDetector::is_ignore_scan(double range, double angle) const
     //     ( 0.65 <= angle && angle <=  0.95) || // 左前
     //     (-0.95 <= angle && angle <= -0.65)    // 右前
     // )
-    const double delta = 0.0436;      // ±2.5度
-    const double delta_inner = 0.01745; // 内側だけ+1度
+    const double delta = 2.5 * M_PI / 180.0;  // ±2.5度
 
     if (
         (-2.50 - delta <= angle && angle <= -2.20 + delta) || // 右後
         ( 2.20 - delta <= angle && angle <=  2.50 + delta) || // 左後
 
-        // 左前（内側＝0方向に向かう側 → 下限をさらに広げる）
-        ( (0.65 - delta - delta_inner) <= angle && angle <= (0.95 + delta) ) ||
-
-        // 右前（内側＝0方向に向かう側 → 上限をさらに広げる）
-        ( (-0.95 - delta) <= angle && angle <= (-0.65 + delta + delta_inner) )
-        )
+        ( (0.65 - delta) <= angle && angle <= (0.95 + delta) ) || // 左前
+        ( (-0.95 - delta) <= angle && angle <= (-0.65 + delta) )  // 右前
+    )
     {
         return true;
     }
