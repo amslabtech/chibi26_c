@@ -23,31 +23,31 @@ DWAPlanner::DWAPlanner() : Node("local_path_planner"), clock_(RCL_ROS_TIME)
     this->declare_parameter("robot_frame", "base_link");
     this->declare_parameter("max_vel", 2.0);
     this->declare_parameter("max_vel1", 3.0);
-    this->declare_parameter("max_vel2", 1.0);
+    this->declare_parameter("max_vel2", 2.0);  //2.0 4.10柴田更新
     this->declare_parameter("avoid_thres_vel", 0.1);
     this->declare_parameter("min_vel", 0.0);
     this->declare_parameter("max_yawrate", 0.0);
     this->declare_parameter("max_yawrate1", 1.0);
-    this->declare_parameter("max_yawrate2", 0.5);
+    this->declare_parameter("max_yawrate2", 0.8);  //0.8 4.10柴田更新
     this->declare_parameter("turn_thres_yawrate", 0.3);
-    this->declare_parameter("max_accel", 1.0);
+    this->declare_parameter("max_accel", 0.8);
     this->declare_parameter("max_dyawrate", 1.0);
     this->declare_parameter("vel_reso", 0.01);
     this->declare_parameter("yawrate_reso", 0.01);
     this->declare_parameter("dt", 0.1);
-    this->declare_parameter("predict_time1", 2.0);
-    this->declare_parameter("predict_time2", 1.7);
-    this->declare_parameter("roomba_radius", 0.2);
-    this->declare_parameter("radius_margin1", 0.1);
-    this->declare_parameter("radius_margin2", 0.05);
+    this->declare_parameter("predict_time1", 1.5);  //1.5 4.10柴田更新
+    this->declare_parameter("predict_time2", 1.2);  //1.2 4.10柴田更新
+    this->declare_parameter("roomba_radius", 0.15);  //0.15 4.10柴田更新
+    this->declare_parameter("radius_margin1", 0.05);  //0.05 4.10柴田更新
+    this->declare_parameter("radius_margin2", 0.05);  //0.05 4.10柴田更新
     this->declare_parameter("weight_heading1", 0.1);
-    this->declare_parameter("weight_dist1", 0.12);
-    this->declare_parameter("weight_vel", 0.1);
+    this->declare_parameter("weight_dist1", 0.5);  //0.5 4.10柴田更新
+    this->declare_parameter("weight_vel", 0.05);  //0.05 4.10柴田更新
     this->declare_parameter("goal_tolerance", 0.2);
-    this->declare_parameter("search_range", 0.5); //1.0 4.08篠田更新
+    this->declare_parameter("search_range", 0.8); //1.0 4.08篠田更新
     //3.25篠田追加(yamlで宣言しているが、cppにはなかったもの)
     this->declare_parameter("weight_heading2", 0.2);
-    this->declare_parameter("weight_dist2", 0.1);
+    this->declare_parameter("weight_dist2", 0.5);  //0.5 4.10柴田更新
     this->declare_parameter("mode_log_time", 1.0);
     this->declare_parameter("stop_vel_th", 0.01);
     this->declare_parameter("stop_yawrate_th", 0.01);
@@ -129,7 +129,7 @@ void DWAPlanner::local_goal_callback(const geometry_msgs::msg::PointStamped::Sha
 
 }
 
-// obs_posesのコールバック関数
+// // obs_posesのコールバック関数
 // void DWAPlanner::obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
 // {
 //     obs_poses_ = *msg;
