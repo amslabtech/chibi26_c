@@ -107,7 +107,7 @@ bool ObstacleDetector::is_ignore_scan(double range, double angle) const
 
     // 2. 【柱の判定】
     // 「距離が近い」かつ「特定の角度」に当てはまるものだけをピンポイントで無視(true)する
-    if (range < 0.0) // 柱があるはずの距離（櫓の半径より少し大きく）
+    if (range < ignore_pillar_) // パラメータで取得した閾値(0.40m)を使う
     {
         if (
             (-2.50 <= angle && angle <= -2.20) || // 右後
