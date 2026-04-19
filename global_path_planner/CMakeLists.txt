@@ -12,7 +12,7 @@ ament_auto_add_executable(${PROJECT_NAME}_node
 # launchファイルをインストール（ament_package_indexが探せる場所に置く）
 install(DIRECTORY
   # launch
-  map
+  # map
   config
   DESTINATION share/${PROJECT_NAME}/
 )

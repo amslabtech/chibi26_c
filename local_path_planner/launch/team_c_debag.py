@@ -56,7 +56,7 @@ def generate_launch_description():
             namespace='',
             output='screen',
             parameters=[{
-                'yaml_filename': '/home/user/ws/src/chibi26_c/bag/map/c_map.yaml',
+                'yaml_filename': '/home/user/ws/src/chibi26_c/map/c_map.yaml',
                 'use_sim_time': True
             }]
         ),
