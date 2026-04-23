@@ -14,8 +14,7 @@ ament_auto_add_executable(c_obstacle_detector_node
   src/obstacle_detector_node.cpp)
 # launchファイルをインストール（ament_package_indexが探せる場所に置く）
 install(DIRECTORY
-  config
-  # launch
+  launch
   DESTINATION share/${PROJECT_NAME}/
 )
 # ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
