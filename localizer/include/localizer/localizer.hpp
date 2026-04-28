@@ -4,7 +4,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <functional>   // bind, placeholders
-#include <memory>       // SharedPtr
+#include <memory>       // SharedPtr / unique_ptr
 #include <type_traits>
 #include <utility>
 #include <nav_msgs/msg/occupancy_grid.hpp>
@@ -53,7 +53,7 @@ class Localizer : public rclcpp::Node
         void   expansion_resetting();      // 膨張リセット
         void   publish_estimated_pose();   // 推定位置のパブリッシュ
         void   publish_particles();        // パーティクルクラウドのパブリッシュ
-        double calc_marginal_likelihood(); // 周辺尤度の算出
+        double calc_marginal_likelihood(); // 周辺尤度の算出（正規化前の重み合計の平均）
 
         // Subscriber
         rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_map_;
@@ -64,13 +64,18 @@ class Localizer : public rclcpp::Node
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_estimated_pose_;
         rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pub_particle_cloud_;
 
+        // ★修正：TransformBroadcasterはクラスのメンバとして持つ
+        // 関数内static にすると、並行処理時の競合や、ノード再生成時にメモリに古い情報が残って
+        // 古いノードと二重通信するリスクがあるため、ライフタイムをクラスと一致させる。
+        std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+
         // ----- 変数 -----
         // 基本設定
         int       hz_;                 // ループ周波数 [Hz]
         int       particle_num_;       // パーティクルの個数 [-]
         int       max_particle_num_;   // パーティクルの個数 [-]
         int       min_particle_num_;   // パーティクルの個数 [-]
-        double    move_dist_th_;       // ロボットの移動開始判断用（スタートからの距離の閾値）[m]    int       reset_counter = 0;   // 連続リセットの回数 [-]
+        double    move_dist_th_;       // ロボットの移動開始判断用（スタートからの距離の閾値）[m]
         // 初期ポーズ関連
         double    init_x_;             // 初期位置 [m]
         double    init_y_;             // 初期位置 [m]
@@ -107,7 +112,7 @@ class Localizer : public rclcpp::Node
         bool flag_broadcast_;
         bool flag_reverse_;
         bool is_visible_;
-        bool is_first_odom_ = true; // ★追加：Odomの初回受信フラグ
+        bool is_first_odom_ = true; // Odomの初回受信フラグ
 
         // OdomModel関連
         double ff_;     // 直進1[m]で生じる道のりのばらつきの標準偏差 [m]

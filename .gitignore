@@ -1,2 +1,5 @@
 bag/
+build/
+install/
+log/
 *.db3
