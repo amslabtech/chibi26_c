@@ -13,7 +13,7 @@ def generate_launch_description():
         Node(
             package='c_obstacle_detector',
             executable='c_obstacle_detector_node',
-            parameters=['/home/user/ws/src/chibi26_c/obstacle_detector/config/param/.yaml', {'use_sim_time': True}],
+            parameters=['/home/user/ws/src/chibi26_c/obstacle_detector/config/obstacle_detector.yaml', {'use_sim_time': True}],
         ),
         Node(
             package='team_c_local_map_creator',
@@ -70,11 +70,14 @@ def generate_launch_description():
                     parameters=[{'use_sim_time': True}],
                     arguments=['0', '0', '0', '0', '0', '0', '1','/base_link', '/laser'],
                 ),
+                # Bagの再生（フルパスを指定）
+                ExecuteProcess(
+                    cmd=['ros2', 'bag', 'play', '/home/user/ws/src/chibi26_c/bag/rosbag2_2026_04_22-06_30_21', '--clock'],
+                    output='screen'
+                ),
             ]
-        ),
-    
-                
-            
+        ),     
+
         TimerAction(
             period=2.0,  # 秒数は状況に応じて調整（map_serverが準備できるくらい待つ）
             actions=[
@@ -83,8 +86,9 @@ def generate_launch_description():
                     executable='lifecycle_bringup',
                     name='map_server_lifecycle',
                     output='screen',
-                    arguments=['map_server']
+                    arguments=['map_server'],
+                    parameters=[{'use_sim_time': True}],
                 )
             ]
-        ) 
+        ), 
     ])
