@@ -10,7 +10,7 @@ Localizer::Localizer() : Node("c_localizer"), engine_(seed_gen_())
     particle_num_             = this->declare_parameter<int>("particle_num", 550);
     max_particle_num_         = this->declare_parameter<int>("max_particle_num", 1000);
     min_particle_num_         = this->declare_parameter<int>("min_particle_num", 100);
-    move_dist_th_             = this->declare_parameter<double>("move_dist_th", 0.16);
+    move_dist_th_             = this->declare_parameter<double>("move_dist_th", 0.195);
     init_x_                   = this->declare_parameter<double>("init_x", 0.0);
     init_y_                   = this->declare_parameter<double>("init_y", 0.0);
     init_yaw_                 = this->declare_parameter<double>("init_yaw", 0.0);
