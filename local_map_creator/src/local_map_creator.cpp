@@ -11,6 +11,11 @@ LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
 {
     // パラメータの取得(hz, map_size, map_reso)
     hz_          = this->declare_parameter<int>("hz", 10);
+    if (hz_ <= 0) //hz_ <= 0の対策
+    {
+        RCLCPP_WARN(this->get_logger(), "hz must be positive. Set to 10 Hz.");
+        hz_ = 10;
+    }
     map_size_    = this->declare_parameter<double>("map_size", 4);  //4m*4mの世界と仮定
     map_reso_    = this->declare_parameter<double>("map_reso", 0.05 );  //1マスが何mか
 
