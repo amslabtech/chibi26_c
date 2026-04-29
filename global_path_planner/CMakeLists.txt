@@ -11,8 +11,8 @@ ament_auto_add_executable(${PROJECT_NAME}_node
   src/global_path_planner_node.cpp)
 # launchファイルをインストール（ament_package_indexが探せる場所に置く）
 install(DIRECTORY
-  launch
-  map
+  # launch
+  # map
   config
   DESTINATION share/${PROJECT_NAME}/
 )

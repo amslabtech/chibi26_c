@@ -102,11 +102,12 @@ class Localizer : public rclcpp::Node
         bool flag_laser_   = false;
 
         // その他のフラグ
-        bool flag_move_ = false; // 機体が動いたか判断用
-        bool flag_init_noise_;   // 初期位置にノイズを加えるか
-        bool flag_broadcast_;    // tf broadcastをするか
-        bool flag_reverse_;      // 初期姿勢を逆にするか
-        bool is_visible_;        // パーティクルクラウドをパブリッシュするか
+        bool flag_move_ = false;
+        bool flag_init_noise_;
+        bool flag_broadcast_;
+        bool flag_reverse_;
+        bool is_visible_;
+        bool is_first_odom_ = true; // ★追加：Odomの初回受信フラグ
 
         // OdomModel関連
         double ff_;     // 直進1[m]で生じる道のりのばらつきの標準偏差 [m]
