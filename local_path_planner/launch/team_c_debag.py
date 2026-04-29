@@ -14,6 +14,7 @@ def generate_launch_description():
             package='c_obstacle_detector',
             executable='c_obstacle_detector_node',
             parameters=['/home/user/ws/src/chibi26_c/obstacle_detector/config/obstacle_detector.yaml', {'use_sim_time': True}],
+            # parameters=[{'use_sim_time': True}],
         ),
         Node(
             package='team_c_local_map_creator',
@@ -34,6 +35,7 @@ def generate_launch_description():
             package='team_c_local_goal_creator',
             executable='team_c_local_goal_creator_node',
             parameters=['/home/user/ws/src/chibi26_c/local_goal_creator/config/param/local_goal_creator.yaml', {'use_sim_time': True}],
+            # parameters=[{'use_sim_time': True}],
         ),
         Node(
             package='team_c_local_path_planner',
@@ -76,7 +78,7 @@ def generate_launch_description():
                     output='screen'
                 ),
             ]
-        ),     
+        ), 
 
         TimerAction(
             period=2.0,  # 秒数は状況に応じて調整（map_serverが準備できるくらい待つ）
