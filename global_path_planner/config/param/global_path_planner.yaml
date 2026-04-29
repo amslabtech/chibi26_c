@@ -2,7 +2,6 @@
   ros__parameters:
     # デバッグ用
     test_show: False
-    sleep_time: 0.001
 
     # 経由点
     way_points_x: [0.05, 16.0, 16.0, -17.5, -17.5, 0.05] ######

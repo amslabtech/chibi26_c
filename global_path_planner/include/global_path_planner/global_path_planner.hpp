@@ -51,21 +51,17 @@ private:
     void create_path(Node_ node);                    // ノードをたどり，パスを作成
     geometry_msgs::msg::PoseStamped node_to_pose(const Node_ node);  // ノード情報を座標へ変換
     void swap_node(const Node_ node); // ノードをリスト間で移動
-    int check_list(const Node_ target_node, std::vector<Node_>& set); // 指定リスト内のノード検索（インデックスを取得）
     void update_list(const Node_ node);              // 隣接ノードを探索しリストを更新
     void create_neighbor_nodes(const Node_ node, std::vector<Node_>& nodes); // 指定ノードの隣接ノードを作成
     void get_motion(std::vector<Motion_>& motion);   // 動作モデル（移動方向とコスト）を定義
-    Motion_ motion(const int dx, const int dy, const int cost);  // モーション構造体を作成
+    Motion_ motion(const int dx, const int dy, const double cost);  // モーション構造体を作成
     Node_ get_neighbor_node(const Node_ node, const Motion_ motion); // 指定モーションを適用したノードを取得
     std::tuple<int, int> search_node(const Node_ node);  // 指定ノードの検索（座標取得）
-    int search_node_from_list(const Node_ node, std::vector<Node_>& list);  // 指定リスト内のノード検索
 
     // ----- ノードチェック関数 -----
-    bool check_start(const Node_ node);  // 指定ノードがスタートノードか判定
     bool check_goal(const Node_ node);   // 指定ノードがゴールノードか判定
     bool check_same_node(const Node_ n1, const Node_ n2);  // 2つのノードが同一か判定
     bool check_obs(const Node_ node);    // 指定ノードが障害物か判定
-    bool check_parent(const int index, const Node_ node); // 指定ノードが親ノードか確認
 
     // ----- 経路計画関連関数 -----
     void process(); // mapを受け取ったら実行する関数（obs_expaner，planningを実行する）
@@ -97,7 +93,6 @@ private:
     // =========================
 
     // 基本設定
-    double sleep_time_; // デバッグ用スリープ時間 [s]
     double margin_; // 障害物拡張マージン [m]
 
     // ノード情報
@@ -118,8 +113,6 @@ private:
     int height_;  // マップの高さ
     int width_;   // マップの幅
     double resolution_; // マップ解像度
-    Node_ origin_;  // マップ原点
-    std::vector<std::vector<int>> map_grid_; // グリッドマップ
 
     // 時間計測
     rclcpp::Clock clock_; // 時間計測用
@@ -129,7 +122,6 @@ private:
     nav_msgs::msg::Path global_path_; // グローバルパス
     nav_msgs::msg::OccupancyGrid map_; // マップデータ
     nav_msgs::msg::OccupancyGrid new_map_; // 拡張マップ
-    geometry_msgs::msg::PointStamped current_node_; // 現在のノード
 };
 
 #endif
