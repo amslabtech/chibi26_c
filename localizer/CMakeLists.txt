@@ -1,6 +1,6 @@
 # /home/amsl/ros2_ws/src/chibi26_c/localizer/CMakeLists.txt
 cmake_minimum_required(VERSION 3.8)
-project(team_c_localizer)
+project(c_localizer)
 
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
@@ -15,7 +15,7 @@ ament_auto_add_executable(${PROJECT_NAME}_node
   src/pose.cpp)
 # launchファイルをインストール（ament_package_indexが探せる場所に置く）
 install(DIRECTORY
-  #launch
+  launch
   config
   DESTINATION share/${PROJECT_NAME}/
 )
