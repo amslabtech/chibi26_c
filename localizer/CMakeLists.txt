@@ -15,7 +15,7 @@ ament_auto_add_executable(${PROJECT_NAME}_node
   src/pose.cpp)
 # launchファイルをインストール（ament_package_indexが探せる場所に置く）
 install(DIRECTORY
-  launch
+  # launch
   config
   DESTINATION share/${PROJECT_NAME}/
 )

@@ -23,10 +23,10 @@
 
     # 加速度制限
     max_accel: 2.0 ######    # [m/s^2]
-    max_dyawrate: 1.5 ###### # [rad/s^2] 4/14 2.0柴田追加
+    max_dyawrate: 1.0 ###### # [rad/s^2] 4/14 2.0柴田追加
 
     # 速度解像度
-    vel_reso: 0.01 ######    # [m/s]
+    vel_reso: 0.05 ######    # [m/s]
     yawrate_reso: 0.1 ###### # [rad/s]
 
     # 停止状態か判断する閾値
@@ -35,8 +35,8 @@
 
     # 時間 [s]
     dt: 0.1 ######
-    predict_time1: 1.5 ###### 4/14 3.0柴田追加
-    predict_time2: 1.0 ######
+    predict_time1: 1.0 ###### 4/14 3.0柴田追加
+    predict_time2: 0.8 ######
 
     # 機体サイズ(半径) [m]
     roomba_radius: 0.2 ######
@@ -44,14 +44,14 @@
     radius_margin2: 0.05 ###### #（減速時）
 
     # 重み定数 [-]
-    weight_heading1: 0.01 ###### #（平常時） 4/14 0.1柴田追加
-    weight_heading2: 0.01 ######  #（減速時） 4/14 0.05柴田追加
-    weight_dist1: 0.5 ######     #（平常時） 4/14 0.4柴田追加
-    weight_dist2: 0.5 ######     #（減速時） 4/14 0.3柴田追加
-    weight_vel: 0.3 ######
+    weight_heading1: 0.04 ###### #（平常時） 4/14 0.1柴田追加
+    weight_heading2: 0.06 ######  #（減速時） 4/14 0.05柴田追加
+    weight_dist1: 0.4 ######     #（平常時） 4/14 0.4柴田追加
+    weight_dist2: 0.3 ######     #（減速時） 4/14 0.3柴田追加
+    weight_vel: 0.5 ######
 
     # 許容誤差 [m]
     goal_tolerance: 0.2 ######
 
     # 評価関数distで探索する範囲 [m]
-    search_range: 1.0 ######     //1.0 4.08篠田更新
+    search_range: 1.5 ######     //1.0 4.08篠田更新

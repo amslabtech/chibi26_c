@@ -141,7 +141,7 @@ void DWAPlanner::obs_poses_callback(const geometry_msgs::msg::PoseArray::SharedP
 {
     obs_poses_ = *msg;
     flag_obs_poses_ = true;
-    RCLCPP_WARN(this->get_logger(), "Received obstacles: %zu", msg->poses.size()); //表示するコード(正味不要)
+    // RCLCPP_WARN(this->get_logger(), "Received obstacles: %zu", msg->poses.size()); //表示するコード(正味不要)
 }
 
 // hzを返す関数
@@ -156,6 +156,22 @@ int DWAPlanner::get_freq()
 void DWAPlanner::process()
 {
     if (can_move()) {
+        // --- 追加：最も近い障害物との距離を確認 ---
+        if (!obs_poses_.poses.empty()) {
+            double nearest_obs_dist = 1e6;
+            for (const auto& obs : obs_poses_.poses) {
+                // ロボット自身(0, 0)から障害物までの距離を計算
+                double d = std::hypot(obs.position.x, obs.position.y);
+                if (d < nearest_obs_dist) {
+                    nearest_obs_dist = d;
+                }
+            }
+            RCLCPP_INFO(this->get_logger(), 
+                "[Debug] Nearest obstacle: %.3f [m] (Collision Threshold: %.3f [m])", 
+                nearest_obs_dist, roomba_radius_ + radius_margin_);
+        }
+        // ------------------------------------------
+
         std::vector<double> input = calc_final_input();
         roomba_control(input[0], input[1]);
     } else {
@@ -185,7 +201,7 @@ bool DWAPlanner::can_move()
     }
 
     double dist_to_goal = std::hypot(local_goal_.point.x, local_goal_.point.y);
-    RCLCPP_WARN(this->get_logger(), "dist_to_goal = %.3f", dist_to_goal);
+    // RCLCPP_WARN(this->get_logger(), "dist_to_goal = %.3f", dist_to_goal);
 
     return dist_to_goal > goal_tolerance_;
 }
@@ -216,11 +232,25 @@ std::vector<double> DWAPlanner::calc_final_input()
     // ダイナミックウィンドウを計算
     calc_dynamic_window();
 
+    // --- 追加：軌道の合否カウント用変数 ---
+    int valid_traj_count = 0;
+    int invalid_traj_count = 0;
+    // --------------------------------------
+
+
     // ###### 並進速度と旋回速度のすべての組み合わせを評価 ######
     for (double v = dw_.min_vel; v <= dw_.max_vel; v += vel_reso_) {
         for (double y = dw_.min_yawrate; y <= dw_.max_yawrate; y += yawrate_reso_) {
             std::vector<State> traj = calc_traj(v, y);
             double score = calc_evaluation(traj);
+
+            // --- 追加：スコアによる合否の集計 ---
+            if (score <= -1e5) { // 衝突判定などで大きくマイナスになった場合
+                invalid_traj_count++;
+            } else {
+                valid_traj_count++;
+            }
+            // ------------------------------------
 
             if (score > max_score) {
                 max_score = score;
@@ -229,6 +259,16 @@ std::vector<double> DWAPlanner::calc_final_input()
             if (is_visible_) trajectories.push_back(traj);
         }
     }
+
+    // --- 追加：評価結果のサマリーを出力 ---
+    RCLCPP_INFO(this->get_logger(), 
+        "[Debug] Traj Eval - Valid: %d, Invalid: %d, MaxScore: %.2f, Output_V: %.2f, Output_Y: %.2f", 
+        valid_traj_count, invalid_traj_count, max_score, input[0], input[1]);
+
+    if (max_score <= -1e5) {
+        RCLCPP_WARN(this->get_logger(), "[Debug] All predictable trajectories are blocked! Robot is stuck in Local Minima.");
+    }
+    // --------------------------------------
 
     // 現在速度の記録
     roomba_.velocity = input[0];
@@ -360,7 +400,7 @@ double DWAPlanner::calc_heading_eval(const std::vector<State>& traj)
 double DWAPlanner::calc_dist_eval(const std::vector<State>& traj)
 {
     if (obs_poses_.poses.empty()) {
-        return 0.0;
+        return search_range_;
     }
 
     double min_dist = search_range_;

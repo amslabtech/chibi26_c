@@ -11,7 +11,7 @@ LocalGoalCreator::LocalGoalCreator() : Node("LocalGoalCreator")
     // グローバルパス内におけるローカルゴールのインデックス
     this->declare_parameter("goal_index", 0);
     // 現在位置-ゴール間の距離 [m]
-    this->declare_parameter("target_dist_to_goal", 1.0);
+    this->declare_parameter("target_dist_to_goal", 1.5);
 
     hz_ = this->get_parameter("hz").as_int();
     index_step_ = this->get_parameter("index_step").as_int();

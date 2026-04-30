@@ -119,11 +119,11 @@ bool ObstacleDetector::is_ignore_scan(double range, double angle, double range_m
         return true;
     }
 
-    // 遠すぎるものを外れ値として除去
-    // if (range >= ignore_dist_)
-    // {
-    //     return true;
-    // }
+    // 近すぎるものを外れ値として除去
+    if (range < 0.20)
+    {
+       return true;
+    }
 
     // 角度で除外（4か所）
     // if (
