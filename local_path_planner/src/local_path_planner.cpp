@@ -299,10 +299,10 @@ std::vector<State> DWAPlanner::calc_traj(const double velocity, const double yaw
 // 予測軌跡作成時における仮想ロボットを移動
 void DWAPlanner::move(State& state, const double velocity, const double yawrate)
 {
-    state.yaw += yawrate * dt_;
     state.yaw = normalize_angle(state.yaw);
     state.x += velocity * std::cos(state.yaw) * dt_;
     state.y += velocity * std::sin(state.yaw) * dt_;
+    state.yaw += yawrate * dt_;
 }
 
 // angleを適切な角度(-M_PI ~ M_PI)の範囲にして返す
@@ -360,7 +360,7 @@ double DWAPlanner::calc_heading_eval(const std::vector<State>& traj)
 double DWAPlanner::calc_dist_eval(const std::vector<State>& traj)
 {
     if (obs_poses_.poses.empty()) {
-        return 0.0;
+        return search_range_; // 障害物がない場合は最大の評価値を返す
     }
 
     double min_dist = search_range_;
