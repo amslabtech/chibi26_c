@@ -9,7 +9,7 @@ Localizer::Localizer() : Node("team_c_localizer"), engine_(seed_gen_())
     this->declare_parameter("particle_num", 600);
     this->declare_parameter("max_particle_num", 1000);
     this->declare_parameter("min_particle_num", 100);
-    this->declare_parameter("move_dist_th", 0.15);
+    this->declare_parameter("move_dist_th", 0.195);
     this->declare_parameter("init_x", 0.0);
     this->declare_parameter("init_y", 0.0);
     this->declare_parameter("init_yaw", 0.0);
