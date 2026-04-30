@@ -13,7 +13,7 @@ def generate_launch_description():
         Node(
             package='c_obstacle_detector',
             executable='c_obstacle_detector_node',
-            parameters=['/home/user/ws/src/chibi26_c/obstacle_detector/config/param/.yaml', {'use_sim_time': True}],
+            parameters=['/home/user/ws/src/chibi26_c/obstacle_detector/config/obstacle_detector.yaml', {'use_sim_time': True}],
         ),
         Node(
             package='team_c_local_map_creator',
@@ -23,7 +23,7 @@ def generate_launch_description():
         Node(
             package='team_c_localizer',
             executable='team_c_localizer_node',
-            parameters=[{'use_sim_time': True}],
+            parameters=['/home/user/ws/src/chibi26_c/localizer/config/param/localizer.yaml', {'use_sim_time': True}],
         ),
         Node(
             package='team_c_global_path_planner',
