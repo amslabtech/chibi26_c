@@ -429,6 +429,8 @@ double DWAPlanner::calc_dist_eval(const std::vector<State>& traj)
 // 軌跡の速度評価を計算する関数
 double DWAPlanner::calc_vel_eval(const std::vector<State>& traj)
 {
+    // 速度ゼロにペナルティを与える
+    if (traj.back().velocity < 1e-6) return -0.5;
     return traj.back().velocity;
 }
 

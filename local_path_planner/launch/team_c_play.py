@@ -33,7 +33,7 @@ def generate_launch_description():
         Node(
             package='team_c_local_goal_creator',
             executable='team_c_local_goal_creator_node',
-            parameters=[{'use_sim_time': False}],
+            parameters=['/home/user/ws/src/chibi26_c/local_goal_creator/config/param/local_goal_creator.yaml', {'use_sim_time': False}],
         ),
         Node(
             package='team_c_local_path_planner',
