@@ -3,25 +3,36 @@
 （AMSL 2026 研修 cチーム用）
 ROS2 Humble を用いたメカナムホイールロボットの自律走行システム．
 
+---
+
 ## システム構成
 
 ### トピックフロー
 
 ```mermaid
 graph TD
-    scan[ /scan]
-    odom[ /odom]
-    map[ /map]
+    classDef blue   fill:#daeaf6,stroke:#2878b5,color:#1a4f7a
+    classDef orange fill:#fde8d0,stroke:#e06c00,color:#7a3a00
+    classDef green  fill:#d6eedc,stroke:#2e8b57,color:#1a5233
+    classDef red    fill:#fad6d6,stroke:#c0392b,color:#6e1f1a
+    classDef yellow fill:#fdf5d0,stroke:#c8a000,color:#6b5200
+    classDef purple fill:#ebe0f5,stroke:#7d3c98,color:#4a1f6a
+    classDef gray   fill:#ebebeb,stroke:#707070,color:#333333
+    classDef brown  fill:#f0e0d0,stroke:#8b4513,color:#4a2009
+    
+    LiDAR[2D LiDAR]:::blue
+    Mecanum1[Mecanum]:::blue
+    Map[Map]:::orange
 
-    scan --> LiDAR[2D LiDAR]
-    odom --> Mecanum1[Mecanum]
-    map  --> Map[Map]
+    LiDAR --> scan[ /scan]:::gray
+    Mecanum1 --> odom[ /odom]:::gray
+    Map  --> map[ /map]:::gray
 
-    LiDAR --> ObsDet[Obstacle Detector]
-    LiDAR ---> Localizer
-    Mecanum1 ---> Localizer
-    Map ---> Localizer
-    Map --> ObsExp[Obstacle Expander]
+    scan --> ObsDet[Obstacle Detector]
+    scan ---> Localizer
+    odom ---> Localizer
+    map ---> Localizer
+    map --> ObsExp[Obstacle Expander]
     
     ObsExp  -->|map| GPP[Global Path Planner]
 
@@ -33,9 +44,9 @@ graph TD
     LGC -->|local goal| LPP[Local Path Planner]
     ObsDet -->|obstacle points| LPP[Local Path Planner]
 
-    LPP -->|cmd_vel| Mecanum2[Mecanum]
+    LPP -->|cmd_vel| Mecanum2[Mecanum]:::blue
 
-    LMC -.->|display only| RViz2
+    LMC -.->|display only| RViz2:::yellow
 ```
 
 ### ノード一覧
