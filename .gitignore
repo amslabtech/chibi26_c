@@ -1,0 +1,7 @@
+bag/
+*.bag
+*.mcap
+log/
+install/
+build/
+*.db3
