@@ -80,7 +80,7 @@ void Astar::obs_expander()
 {
     new_map_ = map_;
     for(int i = 0; i < width_ * height_; i++){
-        if(map_.data[i] >= 100){   // 100 → 50以上に変更
+        if(map_.data[i] >= 50){   // 100 → 50以上に変更
             obs_expand(i);
         }
     }
