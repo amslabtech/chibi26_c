@@ -28,25 +28,46 @@ graph TD
     Mecanum1 --> odom[ /odom]:::gray
     Map  --> map[ /map]:::gray
 
-    scan --> ObsDet[Obstacle Detector]
-    scan ---> Localizer
+    scan --> ObsDet[Obstacle Detector]:::purple
+    scan ---> Localizer:::purple
     odom ---> Localizer
     map ---> Localizer
-    map --> ObsExp[Obstacle Expander]
+    map --> ObsExp[Obstacle Expander]:::purple
     
-    ObsExp  -->|map| GPP[Global Path Planner]
+    ObsExp  -->|map| GPP[Global Path Planner]:::purple
 
-    ObsDet  -->|obstacle points| LMC[Local Map Creator]
+    ObsDet  -->|obstacle points| LMC[Local Map Creator]:::purple
     
-    Localizer -->|estimated pose| LGC[Local Goal Creator]
+    Localizer -->|estimated pose| LGC[Local Goal Creator]:::purple
     GPP     -->|global path| LGC
 
-    LGC -->|local goal| LPP[Local Path Planner]
-    ObsDet -->|obstacle points| LPP[Local Path Planner]
+    LGC -->|local goal| LPP[Local Path Planner]:::purple
+    ObsDet -->|obstacle points| LPP[Local Path Planner]:::purple
 
     LPP -->|cmd_vel| Mecanum2[Mecanum]:::blue
 
     LMC -.->|display only| RViz2:::yellow
+```
+```mermaid
+graph LR
+    classDef blue   fill:#daeaf6,stroke:#2878b5,color:#1a4f7a
+    classDef orange fill:#fde8d0,stroke:#e06c00,color:#7a3a00
+    classDef green  fill:#d6eedc,stroke:#2e8b57,color:#1a5233
+    classDef red    fill:#fad6d6,stroke:#c0392b,color:#6e1f1a
+    classDef yellow fill:#fdf5d0,stroke:#c8a000,color:#6b5200
+    classDef purple fill:#ebe0f5,stroke:#7d3c98,color:#4a1f6a
+    classDef gray   fill:#ebebeb,stroke:#707070,color:#333333
+    classDef brown  fill:#f0e0d0,stroke:#8b4513,color:#4a2009
+
+    subgraph 凡例
+        L1[ハードウェア]:::blue
+        L2[事前マップ]:::orange
+        L3[ROS2 トピック]:::gray
+        L4[計算プログラム]:::purple
+        L5[外部出力]:::yellow
+    end
+
+    style 凡例 fill:#f8f8f8,stroke:#cccccc,color:#333333
 ```
 
 ### ノード一覧
