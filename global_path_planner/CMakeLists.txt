@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(team_global_path_planner)
+project(team_c_global_path_planner)
 
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
@@ -13,6 +13,7 @@ ament_auto_add_executable(${PROJECT_NAME}_node
 install(DIRECTORY
   launch
   map
+  config
   DESTINATION share/${PROJECT_NAME}/
 )
 # ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる

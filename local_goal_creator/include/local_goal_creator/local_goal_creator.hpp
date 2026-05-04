@@ -3,8 +3,8 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/path.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 
 class LocalGoalCreator : public rclcpp::Node
 {
@@ -22,7 +22,7 @@ private:
     int hz_;
     int index_step_;
     int goal_index_;
-    double taeget_distance_;
+    double target_dist_to_goal_;
     bool is_path_ = false;
 
     //　Subscriber

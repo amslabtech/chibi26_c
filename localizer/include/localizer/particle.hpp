@@ -1,3 +1,4 @@
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/include/localizer/particle.hpp
 #ifndef PARTICLE_HPP
 #define PARTICLE_HPP
 
@@ -37,11 +38,11 @@ class Particle
         // マップ内か判断
         bool in_map(const int grid_index, const int map_data_size);
 
-        // 確率密度関数（正規分布）
+        // 【ここを追記】確率密度関数（正規分布）
         double norm_pdf(const double x, const double mean, const double stddev);
 
         // --- メンバ変数 ---
-        double weight_; // [-]
+        double weight_;
 };
 
 #endif

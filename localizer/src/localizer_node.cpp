@@ -1,3 +1,4 @@
+// /home/amsl/ros2_ws/src/chibi26_c/localizer/src/localizer_node.cpp
 #include "localizer/localizer.hpp"
 
 int main(int argc, char *argv[])
@@ -15,3 +16,5 @@ int main(int argc, char *argv[])
 	rclcpp::shutdown();
 	return 0;
 }
+
+

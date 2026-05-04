@@ -1,5 +1,6 @@
+# /home/amsl/ros2_ws/src/chibi26_c/localizer/CMakeLists.txt
 cmake_minimum_required(VERSION 3.8)
-project(team_localizer)
+project(c_localizer)
 
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
@@ -9,13 +10,14 @@ ament_auto_find_build_dependencies()
 ament_auto_add_executable(${PROJECT_NAME}_node
   src/localizer.cpp
   src/localizer_node.cpp
+  src/particle.cpp
   src/odom_model.cpp
   src/particle.cpp
   src/pose.cpp)
 # launchファイルをインストール（ament_package_indexが探せる場所に置く）
 install(DIRECTORY
-  launch
-  param
+  # launch
+  config
   DESTINATION share/${PROJECT_NAME}/
 )
 # ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
