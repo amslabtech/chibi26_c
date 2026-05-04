@@ -11,6 +11,7 @@ ament_auto_add_executable(${PROJECT_NAME}_node
   src/local_goal_creator_node.cpp)
 # launchファイルをインストール（ament_package_indexが探せる場所に置く）
 install(DIRECTORY
+  config
   DESTINATION share/${PROJECT_NAME}/
 )
 # ヘッダーのインストールや共有ライブラリのエクスポート等を自動で行ってくれる
