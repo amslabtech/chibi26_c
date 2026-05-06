@@ -17,7 +17,7 @@ LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
         hz_ = 10;
     }
     map_size_    = this->declare_parameter<double>("map_size", 4);  //4m*4mの世界と仮定
-    map_reso_    = this->declare_parameter<double>("map_reso", 0.05 );  //1マスが何mか
+    map_reso_    = this->declare_parameter<double>("map_reso", 0.02);  //1マスが何mか  0.05
 
     // Sub: /sub_obs_poses
     sub_obs_poses_ = this->create_subscription<geometry_msgs::msg::PoseArray>(
