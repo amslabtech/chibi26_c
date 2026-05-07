@@ -394,30 +394,25 @@ void Astar::planning()
 
     start_node_ = set_way_point(0);
 
-    // ###### ウェイポイント間の経路探索 ######
     for(int phase = 1; phase < total_phase; phase++){
-        // 1.各フェーズの初期化
         open_map_.clear();
         close_map_.clear();
         goal_node_ = set_way_point(phase);
 
+        start_node_.g = 0.0;
+        start_node_.f = 0.0;
+        start_node_.parent_x = -1;
+        start_node_.parent_y = -1;
+
         open_map_[start_node_.y * width_ + start_node_.x] = start_node_;
 
-        // 2.A* メインループ
         while(!open_map_.empty()){
             Node_ current = select_min_f();
-
-            // ###### デバッグポイント A: 探索最前線の表示 ######
-            // いま「検討中」の場所をRVizに表示する
             show_node_point(current);
 
             if(check_goal(current)){
                 create_path(current);
-
-                // ###### デバッグポイント B: フェーズ完了後のパス表示 ######
-                // その区間のパスが完成した瞬間に表示を更新する
                 pub_path_->publish(global_path_);
-
                 start_node_ = current;
                 break;
             }
@@ -425,11 +420,10 @@ void Astar::planning()
             update_list(current);
         }
     }
-    pub_path_->publish(global_path_);
 
+    pub_path_->publish(global_path_);
     show_exe_time();
     RCLCPP_INFO_STREAM(get_logger(), "COMPLITE ASTAR PROGLAM");
-    //exit(0);
 }
 
 
