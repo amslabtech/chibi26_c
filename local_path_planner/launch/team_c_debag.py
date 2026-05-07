@@ -77,7 +77,8 @@ def generate_launch_description():
                 ),
                 # Bagの再生（フルパスを指定）
                 ExecuteProcess(
-                    cmd=['ros2', 'bag', 'play', '/home/user/ws/src/chibi26_c/bag/rosbag2_2026_04_22-06_30_21', '--clock'],
+                    # cmd=['ros2', 'bag', 'play', '/home/user/ws/src/chibi26_c/bag/rosbag2_2026_04_22-06_30_21', '--clock'],
+                    cmd=['ros2', 'bag', 'play', '/home/user/ws/src/chibi26_c/bag/rosbag2_2026_05_06-09_13_26', '--clock'],                    
                     output='screen'
                 ),
             ]
