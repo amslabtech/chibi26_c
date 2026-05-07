@@ -14,10 +14,16 @@ ObstacleDetector::ObstacleDetector()
 {
    // global変数を定義(yamlファイルからパラメータを読み込めるようにすると，パラメータ調整が楽)
     hz_            = this->declare_parameter<int>("hz", 10);
+    if (hz_ <= 0) //hz_ <= 0の対策
+    {
+        RCLCPP_WARN(this->get_logger(), "hz must be positive. Set to 10 Hz.");
+        hz_ = 10;
+    }
+
     laser_step_    = this->declare_parameter<int>("laser_step", 1);
     robot_frame_   = this->declare_parameter<std::string>("robot_frame", "base_link");
-    ignore_dist_   = this->declare_parameter<double>("ignore_dist", 300);
-    ignore_pillar_ = this->declare_parameter<double>("ignore_pillar", 0.40);
+    //ignore_dist_   = this->declare_parameter<double>("ignore_dist", 300);
+    //ignore_pillar_ = this->declare_parameter<double>("ignore_pillar", 0.40);
 
     // Sub: /scan_sub_
     scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -73,7 +79,7 @@ bool ObstacleDetector::scan_obstacle()
         // LiDARの計測開始角度(angle_min)に、1本あたりの角度間隔(angle_increment) × インデックス(i) を足して、現在のレーザーの「角度[rad]」を計算する
         double angle = scan_data.angle_min + i * scan_data.angle_increment;
 
-        if (is_ignore_scan(range, angle))  // 外れ値かどうか確認する
+        if (is_ignore_scan(range, angle, scan_data.range_min, scan_data.range_max))  // 外れ値かどうか確認する
         {
             continue;  // 外れ値だった場合、これ以降の座標計算はスキップして、次のレーザーの処理（次のi）へ進む
         }
@@ -95,37 +101,48 @@ bool ObstacleDetector::scan_obstacle()
     obstacles_pub_->publish(pose_array);  //抽出した全障害物の座標が詰まったpose_array配列をPublish
 
     return true;
-
+    
 }
 
 
 //無視するlidar情報の範囲の決定(lidarがroombaの櫓の中にあり，櫓の４つの柱を障害物として検出してしまうため削除が必要)
-bool ObstacleDetector::is_ignore_scan(double range, double angle) const
+bool ObstacleDetector::is_ignore_scan(double range, double angle, double range_min, double range_max) const
 {
-    // 1. 無効な値は無視
-    if (!std::isfinite(range)) return true;
-
-    // 2. 【柱の判定】
-    // 「距離が近い」かつ「特定の角度」に当てはまるものだけをピンポイントで無視(true)する
-    if (range < ignore_pillar_) // パラメータで取得した閾値(0.40m)を使う
+    // LaserScanはinfが来ることがあるので弾く
+    if (!std::isfinite(range))
     {
-        if (
-            (-2.50 <= angle && angle <= -2.20) || // 右後
-            ( 2.20 <= angle && angle <=  2.50) || // 左後
-            ( 0.65 <= angle && angle <=  0.95) || // 左前
-            (-0.95 <= angle && angle <= -0.65)    // 右前
-        )
-        {
-            return true; // これが「柱」なので除去！
-        }
-        
-        // 柱以外の近距離（自分自身の機体など）も邪魔なら除去
-        // return true; 
+        return true;
     }
 
-    // 3. 【それ以外すべて】
-    // 柱以外の距離や角度のデータは、すべて「有効な障害物」として扱う
-    return false; 
+    if (range < range_min || range > range_max)
+    {
+        return true;
+    }
+
+    // 近すぎるものを外れ値として除去
+    if (range < 0.20)
+    {
+       return true;
+    }
+
+    // 角度で除外（4か所）
+    // if (
+    //     (-2.50 <= angle && angle <= -2.20) || // 右後
+    //     ( 2.20 <= angle && angle <=  2.50) || // 左後
+    //     ( 0.65 <= angle && angle <=  0.95) || // 左前
+    //     (-0.95 <= angle && angle <= -0.65)    // 右前
+    // )
+    const double delta = 0.0436; // 約2.5度ついか
+
+    if (
+        (-2.50 - delta <= angle && angle <= -2.20 + delta) || // 右後
+        ( 2.20 - delta <= angle && angle <=  2.50 + delta) || // 左後
+        ( 0.65 - delta <= angle && angle <=  0.95 + delta) || // 左前
+        (-0.95 - delta <= angle && angle <= -0.65 + delta)    // 右前
+    )
+    {
+        return true;
+    }
+
+    return false;
 }
-
-

@@ -7,7 +7,7 @@ Localizer::Localizer() : Node("c_localizer"), engine_(seed_gen_())
     // ★修正：declare_parameter の戻り値をそのまま代入することで、
     //         declare→get の2行を1行に短縮できる（YAMLで上書きされた値も正しく入る）
     hz_                       = this->declare_parameter<int>("hz", 10);
-    particle_num_             = this->declare_parameter<int>("particle_num", 550);
+    particle_num_             = this->declare_parameter<int>("particle_num", 500);
     max_particle_num_         = this->declare_parameter<int>("max_particle_num", 1000);
     min_particle_num_         = this->declare_parameter<int>("min_particle_num", 100);
     move_dist_th_             = this->declare_parameter<double>("move_dist_th", 0.195);

@@ -11,8 +11,13 @@ LocalMapCreator::LocalMapCreator() : Node("local_map_creator")
 {
     // パラメータの取得(hz, map_size, map_reso)
     hz_          = this->declare_parameter<int>("hz", 10);
-    map_size_    = this->declare_parameter<double>("map_size", 4);  //1m*1mの世界と仮定
-    map_reso_    = this->declare_parameter<double>("map_reso", 0.005 );  //1マスが何mか
+    if (hz_ <= 0) //hz_ <= 0の対策
+    {
+        RCLCPP_WARN(this->get_logger(), "hz must be positive. Set to 10 Hz.");
+        hz_ = 10;
+    }
+    map_size_    = this->declare_parameter<double>("map_size", 4);  //4m*4mの世界と仮定
+    map_reso_    = this->declare_parameter<double>("map_reso", 0.05 );  //1マスが何mか
 
     // Sub: /sub_obs_poses
     sub_obs_poses_ = this->create_subscription<geometry_msgs::msg::PoseArray>(
@@ -82,13 +87,18 @@ void LocalMapCreator::process()
 // 障害物の情報をもとにローカルマップを更新する
 void LocalMapCreator::update_map()
 {
+    // 障害物の位置を考慮してマップを更新する
     for (const auto& pose : obs_poses_.poses)
     {        
+        // ObstacleDetectorで変換済みのx, y
         double x = pose.position.x;
         double y = pose.position.y;
-        double dist = std::sqrt(x * x + y * y);
         
-        // --- 1. 原点から障害物までを白く(0)塗るロジック ---
+        // --- 原点(0,0)から障害物までを走行可能領域(0)として塗る ---
+        double dx = x;
+        double dy = y;
+        double dist = std::sqrt(dx * dx + dy * dy);
+
         if (dist > 1e-6)
         {
             double step = map_reso_ * 0.5;
@@ -97,7 +107,10 @@ void LocalMapCreator::update_map()
             for (int i = 0; i < n; ++i)
             {
                 double t = static_cast<double>(i) / static_cast<double>(n);
-                int free_index = xy_to_grid_index(t * x, t * y);
+                double px = t * dx;
+                double py = t * dy;
+
+                int free_index = xy_to_grid_index(px, py);
 
                 if (free_index != -1)
                 {
@@ -105,14 +118,26 @@ void LocalMapCreator::update_map()
                 }
             }
         }
-
-        // --- 3. 障害物の点を黒(100)で塗る ---
+    
+        // 座標からインデックスへ変換 (ここでマップ外の判定も同時に行われる)
         int index = xy_to_grid_index(x, y);
+
+        //RCLCPP_INFO(this->get_logger(), //確認
+          //  "x=%f y=%f index=%d", x, y, index);
+        
+        // インデックスが -1(マップ外) でなければ、障害物をプロット
         if (index != -1)
         {
-            local_map_.data[index] = 100;
+            local_map_.data[index] = 100; 
+            //RCLCPP_INFO(this->get_logger(), "plot 100 at index=%d", index);　確認
         }
+        /*else
+        {
+            local_map_.data[index] = 0;
+        }*/
+
     }
+    // 更新したマップをpublishする
 }
 
 // マップの初期化(すべて「既知(走行可能)」にする)
