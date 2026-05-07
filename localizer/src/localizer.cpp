@@ -17,7 +17,7 @@ Localizer::Localizer() : Node("c_localizer"), engine_(seed_gen_())
     init_x_dev_               = this->declare_parameter<double>("init_x_dev", 0.5);
     init_y_dev_               = this->declare_parameter<double>("init_y_dev", 0.5);
     init_yaw_dev_             = this->declare_parameter<double>("init_yaw_dev", 0.2);
-    alpha_th_                 = this->declare_parameter<double>("alpha_th", 0.00022);
+    alpha_th_                 = this->declare_parameter<double>("alpha_th", 0.0035);
     reset_count_limit_        = this->declare_parameter<int>("reset_count_limit", 5);
     expansion_x_dev_          = this->declare_parameter<double>("expansion_x_dev", 0.05);
     expansion_y_dev_          = this->declare_parameter<double>("expansion_y_dev", 0.05);

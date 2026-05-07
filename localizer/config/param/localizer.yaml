@@ -15,7 +15,7 @@ node_name1:
     init_yaw: 0.0     # 初期姿勢 [rad]
     init_x_dev: 0.50  # 初期位置xの標準偏差 [m]
     init_y_dev: 0.65  # 初期位置yの標準偏差 [m]
-    init_yaw_dev: 0.5 # 初期姿勢の標準偏差 [rad]
+    init_yaw_dev: 0.2 # 初期姿勢の標準偏差 [rad]
 
     # リセット関連
     alpha_th: 0.0035        # リセットに関する平均尤度の閾値 [-]
@@ -26,7 +26,7 @@ node_name1:
 
     # センサ関連
     laser_step: 10           # 何本ずつレーザを見るか(全1080本)[-]
-    sensor_noise_ratio: 0.03 # 距離に対するセンサノイズ比 [-]
+    sensor_noise_ratio: 0.04 # 距離に対するセンサノイズ比 [-]
 
     # --- 柱に関する角度範囲の配列 [rad] ---
     # 以下が無視される
