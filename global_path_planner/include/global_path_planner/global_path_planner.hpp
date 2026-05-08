@@ -73,6 +73,9 @@ private:
     void show_node_point(const Node_ node);  // Rviz上でノードをポイントとして可視化
     void show_path(nav_msgs::msg::Path& current_path);  // Rviz上で経路を可視化
     void show_exe_time();  // 経路計画の実行時間を表示
+
+    // ----- ウェイポイント可視化 -----
+    void publish_waypoint_markers();
     bool planning_done_ = false;
 
     // =========================
@@ -87,6 +90,14 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_node_point_; // 可視化用ノード位置を発行
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_current_path_; // 現在のパスを発行
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_new_map_; // 拡張後のマップを発行
+
+    // ウェイポイント可視化用Publisher
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_wp_start_;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_wp_corner_1_;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_wp_corner_2_;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_wp_corner_3_;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_wp_corner_4_;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_wp_goal_;
 
     // =========================
     // 変数定義

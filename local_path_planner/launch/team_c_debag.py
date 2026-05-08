@@ -41,12 +41,12 @@ def generate_launch_description():
             parameters=['/home/user/ws/src/chibi26_c/local_path_planner/config/param/local_path_planner.yaml', {'use_sim_time': True}],
         ),
         
-        Node(
-          package='rviz2',
-          executable='rviz2',
-          arguments=['-d','./src/chibi26_c/bag/rviz_debag.rviz'],
-          parameters=[{'use_sim_time': True}],
-        ),
+        #Node(
+        #  package='rviz2',
+        #  executable='rviz2',
+        #  arguments=['-d','./src/chibi26_c/bag/rviz_debag.rviz'],
+        #  parameters=[{'use_sim_time': True}],
+        #),
         
 
         LifecycleNode(

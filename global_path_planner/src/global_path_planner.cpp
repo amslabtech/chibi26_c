@@ -51,6 +51,14 @@ Astar::Astar() : Node("team_global_path_planner_node"), clock_(RCL_ROS_TIME)
         rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable()
     );
 
+    auto qos_latched = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
+    pub_wp_start_    = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_start",    qos_latched);
+    pub_wp_corner_1_ = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_corner_1", qos_latched);
+    pub_wp_corner_2_ = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_corner_2", qos_latched);
+    pub_wp_corner_3_ = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_corner_3", qos_latched);
+    pub_wp_corner_4_ = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_corner_4", qos_latched);
+    pub_wp_goal_     = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_goal",     qos_latched);
+
 }
 
 // mapのコールバック関数
@@ -427,6 +435,27 @@ void Astar::planning()
 }
 
 
+// ウェイポイントをスタート/4隅/ゴールに分けてRviz可視化用にパブリッシュ
+void Astar::publish_waypoint_markers()
+{
+    auto make_point = [&](int idx) {
+        geometry_msgs::msg::PointStamped p;
+        p.header.frame_id = "map";
+        p.header.stamp = clock_.now();
+        p.point.x = way_points_x_[idx];
+        p.point.y = way_points_y_[idx];
+        p.point.z = 0.0;
+        return p;
+    };
+
+    pub_wp_start_->publish(make_point(0));
+    pub_wp_corner_1_->publish(make_point(1));
+    pub_wp_corner_2_->publish(make_point(2));
+    pub_wp_corner_3_->publish(make_point(3));
+    pub_wp_corner_4_->publish(make_point(4));
+    pub_wp_goal_->publish(make_point(5));
+}
+
 // map_callback()関数で実行する関数
 // A*アルゴリズムを実行する前にマップのロードをチェック
 // マップが読み込まれた後に壁判定と経路計画を実行
@@ -441,6 +470,7 @@ void Astar::process()
     }else
     {
         RCLCPP_INFO_STREAM(get_logger(), "NOW LOADED MAP");
+        publish_waypoint_markers(); // ウェイポイントの可視化
         obs_expander(); // 壁の拡張
         planning(); // グローバルパスの作成
         planning_done_ = true;
