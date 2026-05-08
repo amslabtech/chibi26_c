@@ -51,6 +51,14 @@ Astar::Astar() : Node("team_global_path_planner_node"), clock_(RCL_ROS_TIME)
         rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable()
     );
 
+    auto qos_latched = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
+    pub_wp_start_    = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_start",    qos_latched);
+    pub_wp_corner_1_ = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_corner_1", qos_latched);
+    pub_wp_corner_2_ = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_corner_2", qos_latched);
+    pub_wp_corner_3_ = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_corner_3", qos_latched);
+    pub_wp_corner_4_ = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_corner_4", qos_latched);
+    pub_wp_goal_     = this->create_publisher<geometry_msgs::msg::PointStamped>("waypoint_goal",     qos_latched);
+
 }
 
 // mapのコールバック関数
@@ -394,30 +402,25 @@ void Astar::planning()
 
     start_node_ = set_way_point(0);
 
-    // ###### ウェイポイント間の経路探索 ######
     for(int phase = 1; phase < total_phase; phase++){
-        // 1.各フェーズの初期化
         open_map_.clear();
         close_map_.clear();
         goal_node_ = set_way_point(phase);
 
+        start_node_.g = 0.0;
+        start_node_.f = 0.0;
+        start_node_.parent_x = -1;
+        start_node_.parent_y = -1;
+
         open_map_[start_node_.y * width_ + start_node_.x] = start_node_;
 
-        // 2.A* メインループ
         while(!open_map_.empty()){
             Node_ current = select_min_f();
-
-            // ###### デバッグポイント A: 探索最前線の表示 ######
-            // いま「検討中」の場所をRVizに表示する
             show_node_point(current);
 
             if(check_goal(current)){
                 create_path(current);
-
-                // ###### デバッグポイント B: フェーズ完了後のパス表示 ######
-                // その区間のパスが完成した瞬間に表示を更新する
                 pub_path_->publish(global_path_);
-
                 start_node_ = current;
                 break;
             }
@@ -425,13 +428,33 @@ void Astar::planning()
             update_list(current);
         }
     }
-    pub_path_->publish(global_path_);
 
+    pub_path_->publish(global_path_);
     show_exe_time();
     RCLCPP_INFO_STREAM(get_logger(), "COMPLITE ASTAR PROGLAM");
-    //exit(0);
 }
 
+
+// ウェイポイントをスタート/4隅/ゴールに分けてRviz可視化用にパブリッシュ
+void Astar::publish_waypoint_markers()
+{
+    auto make_point = [&](int idx) {
+        geometry_msgs::msg::PointStamped p;
+        p.header.frame_id = "map";
+        p.header.stamp = clock_.now();
+        p.point.x = way_points_x_[idx];
+        p.point.y = way_points_y_[idx];
+        p.point.z = 0.0;
+        return p;
+    };
+
+    pub_wp_start_->publish(make_point(0));
+    pub_wp_corner_1_->publish(make_point(1));
+    pub_wp_corner_2_->publish(make_point(2));
+    pub_wp_corner_3_->publish(make_point(3));
+    pub_wp_corner_4_->publish(make_point(4));
+    pub_wp_goal_->publish(make_point(5));
+}
 
 // map_callback()関数で実行する関数
 // A*アルゴリズムを実行する前にマップのロードをチェック
@@ -447,6 +470,7 @@ void Astar::process()
     }else
     {
         RCLCPP_INFO_STREAM(get_logger(), "NOW LOADED MAP");
+        publish_waypoint_markers(); // ウェイポイントの可視化
         obs_expander(); // 壁の拡張
         planning(); // グローバルパスの作成
         planning_done_ = true;
